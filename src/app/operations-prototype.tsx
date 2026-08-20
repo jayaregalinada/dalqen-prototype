@@ -14,6 +14,7 @@ import { UserSwitcherDialog } from '../dialogs/user-switcher-dialog';
 import { DispatchBoard } from '../dispatch/dispatch-board';
 import { OpsConsole } from '../console/ops-console';
 import { JobJacket } from '../jacket/job-jacket';
+import { AddProjectDialog } from '../dialogs/add-project-dialog';
 import '../globals.css';
 
 type DialogState = {
@@ -21,6 +22,7 @@ type DialogState = {
   assignmentOpen: boolean;
   userSwitcherOpen: boolean;
   newOrderOpen: boolean;
+  addProjectOpen: boolean;
 };
 
 type DialogAction =
@@ -43,6 +45,7 @@ const initialDialogs: DialogState = {
   assignmentOpen: false,
   userSwitcherOpen: false,
   newOrderOpen: false,
+  addProjectOpen: false,
 };
 
 export function OperationsPrototype() {
@@ -54,7 +57,7 @@ export function OperationsPrototype() {
   const rawMode = params.get('mode');
   const variant: Variant = rawVariant === 'B' || rawVariant === 'C' ? rawVariant : 'A';
   const screen: Screen = rawScreen === 'orders' || rawScreen === 'order' || rawScreen === 'project' ? rawScreen : 'dashboard';
-  const queueMode: QueueMode = rawMode === 'projects' ? 'projects' : 'orders';
+  const queueMode: QueueMode = rawMode === 'projects' ? 'projects' : rawMode === 'kanban' ? 'kanban' : 'orders';
   const rawUser = params.get('user');
   const user: User = users.find((u) => u.id === rawUser) ?? users[0];
   const { state: sharedState, syncStatus, updateState, resetState } = useSharedDemoState();
@@ -69,6 +72,7 @@ export function OperationsPrototype() {
     openAssignment: openDialog('assignmentOpen'),
     openRework: openDialog('reworkOpen'),
     openUserSwitcher: openDialog('userSwitcherOpen'),
+    openAddProject: openDialog('addProjectOpen'),
   };
 
   const workspace = usePrototypeWorkspace(sharedState, user, screen, queueMode, nav, updateState, dialogOpeners);
@@ -83,9 +87,14 @@ export function OperationsPrototype() {
     closeDialog('assignmentOpen')();
   };
 
-  const handleRework = () => {
-    workspace.confirmRework();
+  const handleRework = (targetStage: string, reason: string) => {
+    workspace.confirmRework(targetStage, reason);
     closeDialog('reworkOpen')();
+  };
+
+  const handleAddProject = (draft: { name: string; type: string; quantity: number; route: string }) => {
+    workspace.addProjectToOrder(draft);
+    closeDialog('addProjectOpen')();
   };
 
   return (
@@ -111,9 +120,12 @@ export function OperationsPrototype() {
           assign={handleAssignment}
         />
       )}
-      {dialogs.reworkOpen && <ReworkDialog close={closeDialog('reworkOpen')} confirm={handleRework} />}
+      {dialogs.reworkOpen && <ReworkDialog currentStage={workspace.stage} close={closeDialog('reworkOpen')} confirm={handleRework} />}
       {dialogs.userSwitcherOpen && (
         <UserSwitcherDialog user={user} close={closeDialog('userSwitcherOpen')} select={workspace.selectUser} />
+      )}
+      {dialogs.addProjectOpen && (
+        <AddProjectDialog close={closeDialog('addProjectOpen')} addProject={handleAddProject} />
       )}
     </>
   );

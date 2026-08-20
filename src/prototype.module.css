@@ -412,6 +412,24 @@
   .jacketHeader { grid-template-columns: 44px 1fr auto; }.jacketMenu { width: 44px; }.jacketHeaderTools { padding-right: 8px; }.jacketLayout { display: block; }.jacketIndex { position: fixed; z-index: 12; top: auto; right: 0; bottom: 0; left: 0; display: block; width: auto; height: 63px; border-top: 1px solid var(--line); border-right: 0; padding: 6px 10px; background: rgba(237,241,244,.96); backdrop-filter: blur(16px); }.jacketIndex .indexLabel, .jacketIndex .jacketNew, .jacketIndex .jacketDate, .jacketIndex nav a:nth-child(n+3) { display: none; }.jacketIndex nav { display: grid; grid-template-columns: repeat(2,1fr); }.jacketIndex nav a, .jacketIndex nav a:not([aria-current="page"]) { display: flex; min-height: 49px; justify-content: center; gap: 8px; color: #65717b; }.jacketIndex nav a[aria-current="page"] { color: white; }.jacketDashboard, .jacketList, .jacketOrder, .jacketProject { padding: 28px 14px 150px; }.jacketMasthead h1 { font-size: 45px; }.jacketTabs { grid-template-columns: 1fr 1fr; }.jacketTabs a { min-height: 115px; }.jacketPriority { overflow-x: auto; }.jacketPriority > header, .jacketPriority > a { min-width: 650px; }.jacketListHead { align-items: start; flex-direction: column; gap: 18px; }.jacketListHead h1 { font-size: 42px; }.jacketToolbar { align-items: stretch; flex-direction: column; gap: 10px; }.jacketToolbar > div:last-child { overflow-x: auto; }.jacketFolderHead { align-items: start; flex-direction: column; gap: 20px; }.jacketFolderHead h1 { font-size: 46px; }.jacketOrderMeta { grid-template-columns: 1fr 1fr; }.jacketOrderGrid > section { overflow-x: auto; }.jacketOrderGrid > section > header, .jacketOrderGrid > section > a { min-width: 640px; }.jacketProjectHead h1 { font-size: 37px; }
 }
 
+/* Kanban board */
+.kanbanBoard { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; padding: 4px 0; }
+.kanbanColumn { display: flex; flex-direction: column; gap: 8px; }
+.kanbanColumnHeader { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 8px; background: var(--tint); font-family: var(--font-ui); }
+.kanbanColumnHeader span { font-size: 12px; font-weight: 700; color: var(--ink); text-transform: uppercase; letter-spacing: 0.04em; }
+.kanbanColumnHeader small { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; background: var(--line); color: var(--muted); font-size: 12px; font-weight: 700; font-family: var(--font-data); }
+.kanbanCards { display: flex; flex-direction: column; gap: 6px; }
+.kanbanCard { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); text-decoration: none; transition: box-shadow 0.15s; cursor: pointer; }
+.kanbanCard:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.kanbanCardHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kanbanCardHead strong { font-size: 13px; font-weight: 600; color: var(--ink); }
+.kanbanCardMeta { display: flex; gap: 10px; font-size: 12px; color: var(--muted); }
+.kanbanCardMeta .mono { font-family: var(--font-data); }
+.emptyKanban { padding: 40px 20px; color: var(--muted); font-size: 14px; text-align: center; }
+
+/* Order actions */
+.orderActions { display: flex; align-items: center; gap: 12px; }
+
 @media (prefers-reduced-motion: reduce) {
   .prototype *, .prototype *::before, .prototype *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

@@ -2,7 +2,7 @@ import type { DemoOrder, DemoProject, NewOrderInput, SyncStatus } from "../hooks
 export type { DemoOrder, DemoProject, NewOrderInput, SyncStatus };
 export type Variant = "A" | "B" | "C";
 export type Screen = "dashboard" | "orders" | "order" | "project";
-export type QueueMode = "orders" | "projects";
+export type QueueMode = 'orders' | 'projects' | 'kanban';
 export type Role = "owner" | "artist" | "sewer" | "heatpress" | "qc";
 export type User = { id: string; name: string; role: Role; initials: string; dept: string | null };
 export type OrderRow = { ref: string; title: string; customer: string; due: string; progress: string; status: string; priority: string };
@@ -11,10 +11,11 @@ export type ProjectCard = { name: string; detail: string; stage: string; owner: 
 export type DashboardStats = { overdue: number; dueToday: number; waiting: number; qcIssues: number; ready: number; activeProjects: number; released: number };
 export type PrototypeProps = {
   user: User; canCreateOrder: boolean; variant: Variant; screen: Screen; queueMode: QueueMode;
-  stage: string; qcStatus: "Pending" | "Passed" | "Issue"; notice: string;
+  stage: string; qcStatus: 'Pending' | 'Passed' | 'Issue'; notice: string;
   currentOrder?: DemoOrder; currentProject?: DemoProject;
   orderRows: OrderRow[]; projectRows: ProjectRow[]; projects: ProjectCard[]; stats: DashboardStats;
   href: (screen: Screen, mode?: QueueMode) => string; setQueueMode: (mode: QueueMode) => void;
   openNewOrder: () => void; advanceStage: () => void; passQc: () => void;
   openAssignment: () => void; openRework: () => void; openUserSwitcher: () => void;
+  openAddProject: () => void;
 };

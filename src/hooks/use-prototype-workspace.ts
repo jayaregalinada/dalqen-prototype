@@ -30,6 +30,7 @@ export function usePrototypeWorkspace(
     openAssignment: () => void;
     openRework: () => void;
     openUserSwitcher: () => void;
+    openAddProject: () => void;
   },
 ) {
   const canCreateOrder = user.role === 'owner';
@@ -160,14 +161,45 @@ export function usePrototypeWorkspace(
     [updateCurrentProject, currentProject],
   );
 
-  const confirmRework = useCallback(() => {
-    updateCurrentProject(
-      { stage: 'Printing', qcStatus: 'Issue', department: 'Printing', assignee: 'Unassigned' },
-      'Rework recorded. Project returned to Printing and followers notified.',
-    );
-  }, [updateCurrentProject]);
+  const confirmRework = useCallback(
+    (targetStage: string, reason: string) => {
+      updateCurrentProject(
+        { stage: targetStage, qcStatus: 'Issue', department: targetStage, assignee: 'Unassigned' },
+        `Rework recorded. Project returned to ${targetStage} and followers notified. Reason: ${reason}`,
+      );
+    },
+    [updateCurrentProject],
+  );
 
   const setQueueMode = useCallback((mode: QueueMode) => navigateTo(href('orders', mode), true), [href]);
+
+  const addProjectToOrder = useCallback(
+    (draft: { name: string; type: string; quantity: number; route: string }) => {
+      if (!currentOrder) return;
+      const project = {
+        id: crypto.randomUUID(),
+        name: draft.name,
+        type: draft.type,
+        quantity: draft.quantity,
+        route: draft.route,
+        stage: 'Layout',
+        assignee: 'Unassigned',
+        department: 'Layout',
+        paid: false,
+        qcStatus: 'Pending' as const,
+      };
+      void updateState({
+        ...sharedState,
+        notice: `Project "${draft.name}" added to ${currentOrder.ref}.`,
+        orders: sharedState.orders.map((order) =>
+          order.id === currentOrder.id
+            ? { ...order, projects: [...order.projects, project] }
+            : order,
+        ),
+      });
+    },
+    [currentOrder, sharedState, updateState],
+  );
 
   const createOrder = useCallback(
     (input: NewOrderInput) => {
@@ -232,6 +264,7 @@ export function usePrototypeWorkspace(
     openAssignment: dialogOpeners.openAssignment,
     openRework: dialogOpeners.openRework,
     openUserSwitcher: dialogOpeners.openUserSwitcher,
+    openAddProject: dialogOpeners.openAddProject,
   };
 
   return {
@@ -251,6 +284,7 @@ export function usePrototypeWorkspace(
     confirmAssignment,
     confirmRework,
     createOrder,
+    addProjectToOrder,
     selectUser,
     setQueueMode,
   };
