@@ -1,0 +1,30 @@
+:root {
+  --font-ui: "Manrope Variable", system-ui, sans-serif;
+  --font-editorial: "Newsreader Variable", Georgia, serif;
+  --font-data: "JetBrains Mono Variable", ui-monospace, monospace;
+  font-family: var(--font-ui);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #f3f6f1;
+  font-family: var(--font-ui);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
