@@ -1,6 +1,14 @@
 import type { ReactNode } from 'react';
-import { cx } from '../shared/helpers';
-import styles from '../prototype.module.css';
+import { Badge } from '@/components/ui/badge';
+
+const TONE_VARIANT: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
+  neutral: 'outline',
+  info: 'secondary',
+  warning: 'destructive',
+  danger: 'destructive',
+  success: 'secondary',
+};
+
 export function Status({ children, tone = 'neutral' }: { children: ReactNode; tone?: string }) {
-  return <span className={cx(styles.status, styles['status_' + tone])}>{children}</span>;
+  return <Badge variant={TONE_VARIANT[tone] ?? 'outline'}>{children}</Badge>;
 }

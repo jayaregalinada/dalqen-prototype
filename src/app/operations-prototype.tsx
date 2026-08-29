@@ -1,19 +1,16 @@
-import { useMemo, useReducer } from 'react';
+import { useMemo, useReducer, useState } from 'react';
 import type { NewOrderInput } from '../hooks/use-shared-demo-state';
-import type { Screen, Variant, QueueMode, User } from '../shared/types';
+import type { Screen, QueueMode, User } from '../shared/types';
 import { users } from '../shared/constants';
 import { usePrototypeSearch } from '../hooks/use-prototype-search';
 import { useSharedDemoState } from '../hooks/use-shared-demo-state';
 import { usePrototypeWorkspace } from '../hooks/use-prototype-workspace';
-import { PrototypeSwitcher } from '../ui/prototype-switcher';
 import { SharedDemoControls } from '../ui/shared-demo-controls';
 import { NewJobOrderDialog } from '../dialogs/new-job-order-dialog';
 import { AssignArtistDialog } from '../dialogs/assign-artist-dialog';
 import { ReworkDialog } from '../dialogs/rework-dialog';
 import { UserSwitcherDialog } from '../dialogs/user-switcher-dialog';
 import { DispatchBoard } from '../dispatch/dispatch-board';
-import { OpsConsole } from '../console/ops-console';
-import { JobJacket } from '../jacket/job-jacket';
 import { AddProjectDialog } from '../dialogs/add-project-dialog';
 import '../globals.css';
 
@@ -52,30 +49,30 @@ export function OperationsPrototype() {
   const search = usePrototypeSearch();
   const params = useMemo(() => new URLSearchParams(search), [search]);
   const pathname = window.location.pathname;
-  const rawVariant = params.get('variant');
   const rawScreen = params.get('screen');
   const rawMode = params.get('mode');
-  const variant: Variant = rawVariant === 'B' || rawVariant === 'C' ? rawVariant : 'A';
   const screen: Screen = rawScreen === 'orders' || rawScreen === 'order' || rawScreen === 'project' ? rawScreen : 'dashboard';
   const queueMode: QueueMode = rawMode === 'projects' ? 'projects' : rawMode === 'kanban' ? 'kanban' : 'orders';
   const rawUser = params.get('user');
   const user: User = users.find((u) => u.id === rawUser) ?? users[0];
   const { state: sharedState, syncStatus, updateState, resetState } = useSharedDemoState();
   const [dialogs, dispatchDialog] = useReducer(dialogReducer, initialDialogs);
+  const [addProjectColumns, setAddProjectColumns] = useState<string[]>([]);
 
   const openDialog = (dialog: keyof DialogState) => () => dispatchDialog({ type: 'OPEN', dialog });
   const closeDialog = (dialog: keyof DialogState) => () => dispatchDialog({ type: 'CLOSE', dialog });
+  const openAddProject = (columns: string[]) => { setAddProjectColumns(columns); openDialog('addProjectOpen')(); };
 
-  const nav = { user, variant, pathname, search };
+  const nav = { user, pathname, search };
   const dialogOpeners = {
     openNewOrder: openDialog('newOrderOpen'),
     openAssignment: openDialog('assignmentOpen'),
     openRework: openDialog('reworkOpen'),
     openUserSwitcher: openDialog('userSwitcherOpen'),
-    openAddProject: openDialog('addProjectOpen'),
+    openAddProject,
   };
 
-  const workspace = usePrototypeWorkspace(sharedState, user, screen, queueMode, nav, updateState, dialogOpeners);
+  const workspace = usePrototypeWorkspace(sharedState, user, screen, queueMode, nav, updateState, syncStatus, dialogOpeners);
 
   const handleCreateOrder = (input: NewOrderInput) => {
     workspace.createOrder(input);
@@ -92,17 +89,25 @@ export function OperationsPrototype() {
     closeDialog('reworkOpen')();
   };
 
-  const handleAddProject = (draft: { name: string; type: string; quantity: number; route: string }) => {
+  const handleAddCategory = (name: string) => {
+    if (sharedState.categories.includes(name)) return;
+    void updateState({ ...sharedState, categories: [...sharedState.categories, name], orderTypes: { ...sharedState.orderTypes, [name]: [] } });
+  };
+
+  const handleAddOrderType = (category: string, name: string) => {
+    const list = sharedState.orderTypes[category] ?? [];
+    if (list.includes(name)) return;
+    void updateState({ ...sharedState, orderTypes: { ...sharedState.orderTypes, [category]: [...list, name] } });
+  };
+
+  const handleAddProject = (draft: { name: string; custom: Record<string, string> }) => {
     workspace.addProjectToOrder(draft);
     closeDialog('addProjectOpen')();
   };
 
   return (
     <>
-      {variant === 'A' && <DispatchBoard {...workspace.props} />}
-      {variant === 'B' && <OpsConsole {...workspace.props} />}
-      {variant === 'C' && <JobJacket {...workspace.props} />}
-      <PrototypeSwitcher current={variant} />
+      <DispatchBoard {...workspace.props} />
       <SharedDemoControls
         status={syncStatus}
         canReset={workspace.canCreateOrder}
@@ -112,7 +117,7 @@ export function OperationsPrototype() {
           }
         }}
       />
-      {dialogs.newOrderOpen && <NewJobOrderDialog close={closeDialog('newOrderOpen')} create={handleCreateOrder} />}
+      {dialogs.newOrderOpen && <NewJobOrderDialog close={closeDialog('newOrderOpen')} create={handleCreateOrder} categories={sharedState.categories} orderTypes={sharedState.orderTypes} addCategory={handleAddCategory} addOrderType={handleAddOrderType} />}
       {dialogs.assignmentOpen && workspace.currentProject && (
         <AssignArtistDialog
           project={workspace.currentProject}
@@ -125,7 +130,7 @@ export function OperationsPrototype() {
         <UserSwitcherDialog user={user} close={closeDialog('userSwitcherOpen')} select={workspace.selectUser} />
       )}
       {dialogs.addProjectOpen && (
-        <AddProjectDialog close={closeDialog('addProjectOpen')} addProject={handleAddProject} />
+        <AddProjectDialog columns={addProjectColumns} close={closeDialog('addProjectOpen')} addProject={handleAddProject} />
       )}
     </>
   );

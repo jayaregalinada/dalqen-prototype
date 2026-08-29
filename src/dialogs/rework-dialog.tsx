@@ -1,6 +1,10 @@
+import { IconAlertCircle } from '@tabler/icons-react';
 import { useState, type FormEvent } from 'react';
-import { AlertCircle, X } from 'lucide-react';
-import styles from '../prototype.module.css';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 
 export function ReworkDialog({
   currentStage,
@@ -24,32 +28,35 @@ export function ReworkDialog({
   };
 
   return (
-    <div className={styles.dialogScrim} role="presentation" onMouseDown={close}>
-      <section className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="rework-title" onMouseDown={(e) => e.stopPropagation()}>
-        <div className={styles.dialogHead}>
-          <div><span className={styles.eyebrow}>Record exception</span><h2 id="rework-title">Send project back for rework</h2></div>
-          <button type="button" onClick={close} aria-label="Close rework dialog"><X size={18} /></button>
-        </div>
+    <Dialog open onOpenChange={(open) => { if (!open) close(); }}>
+      <DialogContent className="sm:max-w-[520px]" showCloseButton>
         <form onSubmit={submit}>
-          <label>
-            Return to stage
-            <select value={targetStage} onChange={(e) => setTargetStage(e.target.value)}>
-              {previousStages.map((stage) => (
-                <option key={stage} value={stage}>{stage}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Reason
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
-          </label>
-          <p><AlertCircle size={16} aria-hidden /> The assigned department and project followers will be notified.</p>
-          <div className={styles.dialogActions}>
-            <button type="button" className={styles.ghostButton} onClick={close}>Keep current stage</button>
-            <button type="submit" className={styles.dangerButton}>Send to {targetStage}</button>
+          <DialogHeader>
+            <span className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Record exception</span>
+            <DialogTitle>Send project back for rework</DialogTitle>
+          </DialogHeader>
+          <div className="mt-2 grid gap-3">
+            <Label>Return to stage
+              <Select value={targetStage} onValueChange={(v) => setTargetStage(v ?? '')}>
+                <SelectTrigger className="mt-1.5 w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {previousStages.map((stage) => (
+                    <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Label>
+            <Label>Reason
+              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="mt-1.5" />
+            </Label>
           </div>
+          <DialogDescription className="mt-3 flex items-center gap-2"><IconAlertCircle size={16} aria-hidden /> The assigned department and project followers will be notified.</DialogDescription>
+          <DialogFooter className="mt-5">
+            <Button type="button" variant="ghost" onClick={close}>Keep current stage</Button>
+            <Button type="submit" variant="destructive">Send to {targetStage}</Button>
+          </DialogFooter>
         </form>
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

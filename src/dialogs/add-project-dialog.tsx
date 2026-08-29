@@ -1,45 +1,51 @@
+import { IconArrowRight, IconPlus } from '@tabler/icons-react';
 import { useState, type FormEvent } from 'react';
-import { X, ArrowRight, Plus } from 'lucide-react';
-import { cx } from '../shared/helpers';
-import styles from '../prototype.module.css';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 
-type ProjectDraft = { name: string; type: string; quantity: number; route: string };
+type ItemDraft = { name: string; custom: Record<string, string> };
 
 export function AddProjectDialog({
+  columns,
   close,
   addProject,
 }: {
+  columns: string[];
   close: () => void;
-  addProject: (draft: ProjectDraft) => void;
+  addProject: (draft: ItemDraft) => void;
 }) {
+  const firstCol = columns[0] ?? 'Item name';
   const [name, setName] = useState('');
-  const [type, setType] = useState('Jersey Set');
-  const [quantity, setQuantity] = useState(1);
-  const [route, setRoute] = useState('Full Apparel');
+  const [custom, setCustom] = useState<Record<string, string>>({});
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    addProject({ name, type, quantity, route });
+    addProject({ name, custom });
   };
 
   return (
-    <div className={styles.dialogScrim} role="presentation" onMouseDown={close}>
-      <form className={cx(styles.dialog, styles.newOrderDialog)} role="dialog" aria-modal="true" aria-labelledby="add-project-title" onSubmit={submit} onMouseDown={(e) => e.stopPropagation()}>
-        <div className={styles.dialogHead}>
-          <div><span className={styles.eyebrow}>Extend job order</span><h2 id="add-project-title">Add a project</h2><p>Add another production line item to this job order.</p></div>
-          <button type="button" onClick={close} aria-label="Close add project"><X size={18} /></button>
-        </div>
-        <div className={styles.formGrid}>
-          <label>Description<input required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Home jersey set" /></label>
-          <label>Type<select value={type} onChange={(e) => setType(e.target.value)}><option>Jersey Set</option><option>Jersey Upper</option><option>Polo</option><option>T-shirt</option><option>Tarpaulin</option><option>Custom item</option></select></label>
-          <label>Quantity<input required min={1} type="number" value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} /></label>
-          <label>Route<select value={route} onChange={(e) => setRoute(e.target.value)}><option>Full Apparel</option><option>Print & Press</option><option>Print Only / DTF</option><option>Subcon</option><option>Tarpaulin</option></select></label>
-        </div>
-        <div className={styles.dialogActions}>
-          <button type="button" className={styles.ghostButton} onClick={close}>Cancel</button>
-          <button type="submit" className={styles.primaryButton}><Plus size={16} /> Add project <ArrowRight size={16} /></button>
-        </div>
-      </form>
-    </div>
+    <Dialog open onOpenChange={(open) => { if (!open) close(); }}>
+      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-[640px]" showCloseButton>
+        <form onSubmit={submit}>
+          <DialogHeader>
+            <span className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Extend job order</span>
+            <DialogTitle>Add an item</DialogTitle>
+            <DialogDescription>Each field is a column in this order's Line Up.</DialogDescription>
+          </DialogHeader>
+          <div className="mt-3 grid grid-cols-2 gap-3 max-[600px]:grid-cols-1">
+            <Label className="col-span-1">{firstCol}<Input required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Team Pro Kit" /></Label>
+            {columns.slice(1).map((col) => (
+              <Label key={col}>{col}<Input value={custom[col] ?? ''} onChange={(e) => setCustom((prev) => ({ ...prev, [col]: e.target.value }))} placeholder="—" /></Label>
+            ))}
+          </div>
+          <DialogFooter className="mt-5">
+            <Button type="button" variant="ghost" onClick={close}>Cancel</Button>
+            <Button type="submit"><IconPlus size={16} /> Add item <IconArrowRight size={16} /></Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

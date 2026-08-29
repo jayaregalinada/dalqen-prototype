@@ -1,5 +1,4 @@
 import type { ReactNode, ComponentType } from "react";
-import styles from "../prototype.module.css";
-export function IconLabel({ icon: Icon, children }: { icon: ComponentType<{ size?: number; strokeWidth?: number; "aria-hidden"?: boolean }>; children: ReactNode }) {
-  return <span className={styles.iconLabel}><Icon size={16} strokeWidth={1.65} aria-hidden />{children}</span>;
+export function IconLabel({ icon: Icon, children }: { icon: ComponentType<{ size?: number; stroke?: number; "aria-hidden"?: boolean }>; children: ReactNode }) {
+  return <span className="inline-flex items-center gap-2"><Icon size={16} stroke={1.65} aria-hidden />{children}</span>;
 }

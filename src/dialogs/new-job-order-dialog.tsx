@@ -1,60 +1,76 @@
-import { useReducer, type FormEvent } from 'react';
-import { Plus, X, ArrowRight } from 'lucide-react';
-import { cx } from '../shared/helpers';
+import { IconArrowRight } from '@tabler/icons-react';
+import { useState, type FormEvent } from 'react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import type { NewOrderInput } from '../shared/types';
-import styles from '../prototype.module.css';
+import { OverviewEditor } from '../ui/overview-editor';
 
-type ProjectDraft = { name: string; type: string; quantity: number; route: string; };
+const ADD_OPTION = '__add';
 
 type FormState = {
   customer: string;
   title: string;
   dueDate: string;
   priority: 'Normal' | 'Urgent';
-  notes: string;
-  projectDrafts: ProjectDraft[];
+  contact: string;
+  category: string;
+  orderType: string;
+  overview: string;
 };
 
-type FormAction =
-  | { type: 'SET_FIELD'; field: 'customer' | 'title' | 'dueDate' | 'notes'; value: string }
-  | { type: 'SET_PRIORITY'; value: 'Normal' | 'Urgent' }
-  | { type: 'UPDATE_PROJECT'; index: number; field: keyof ProjectDraft; value: string | number }
-  | { type: 'ADD_PROJECT' }
-  | { type: 'REMOVE_PROJECT'; index: number };
+const defaultDueDate = () => new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
 
-const defaultDraft: ProjectDraft = { name: '', type: 'Jersey Set', quantity: 1, route: 'Full Apparel' };
+type DialogProps = {
+  close: () => void;
+  create: (input: NewOrderInput) => void;
+  categories: string[];
+  orderTypes: Record<string, string[]>;
+  addCategory: (name: string) => void;
+  addOrderType: (category: string, name: string) => void;
+};
 
-function formReducer(state: FormState, action: FormAction): FormState {
-  switch (action.type) {
-    case 'SET_FIELD':
-      return { ...state, [action.field]: action.value };
-    case 'SET_PRIORITY':
-      return { ...state, priority: action.value };
-    case 'UPDATE_PROJECT':
-      return {
-        ...state,
-        projectDrafts: state.projectDrafts.map((p, i) =>
-          i === action.index ? { ...p, [action.field]: action.value } : p
-        ),
-      };
-    case 'ADD_PROJECT':
-      return { ...state, projectDrafts: [...state.projectDrafts, { ...defaultDraft }] };
-    case 'REMOVE_PROJECT':
-      return { ...state, projectDrafts: state.projectDrafts.filter((_, i) => i !== action.index) };
-    default:
-      return state;
-  }
-}
-
-export function NewJobOrderDialog({ close, create }: { close: () => void; create: (input: NewOrderInput) => void }) {
-  const [form, dispatch] = useReducer(formReducer, {
+export function NewJobOrderDialog({ close, create, categories, orderTypes, addCategory, addOrderType }: DialogProps) {
+  const [form, setForm] = useState<FormState>({
     customer: '',
     title: '',
-    dueDate: '',
-    priority: 'Normal' as 'Normal' | 'Urgent',
-    notes: '',
-    projectDrafts: [{ ...defaultDraft }],
+    dueDate: defaultDueDate(),
+    priority: 'Normal',
+    contact: '',
+    category: 'Apparel',
+    orderType: 'Jersey Set',
+    overview: '',
   });
+  const set = <K extends keyof FormState>(field: K, value: FormState[K]) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
+
+  const onCategoryChange = (value: string) => {
+    if (value === ADD_OPTION) {
+      const name = window.prompt('New category name');
+      if (name?.trim()) {
+        addCategory(name.trim());
+        set('category', name.trim());
+        set('orderType', '');
+      }
+      return;
+    }
+    set('category', value);
+    set('orderType', orderTypes[value]?.[0] ?? '');
+  };
+
+  const onOrderTypeChange = (value: string) => {
+    if (value === ADD_OPTION) {
+      const name = window.prompt(`New order type for "${form.category}"`);
+      if (name?.trim()) {
+        addOrderType(form.category, name.trim());
+        set('orderType', name.trim());
+      }
+      return;
+    }
+    set('orderType', value);
+  };
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -63,41 +79,66 @@ export function NewJobOrderDialog({ close, create }: { close: () => void; create
       title: form.title,
       dueDate: form.dueDate,
       priority: form.priority,
-      notes: form.notes,
-      projects: form.projectDrafts,
+      contact: form.contact,
+      category: form.category,
+      orderType: form.orderType,
+      overview: form.overview,
+      projects: [],
     });
   };
 
   return (
-    <div className={styles.dialogScrim} role="presentation" onMouseDown={close}>
-      <form className={cx(styles.dialog, styles.newOrderDialog)} role="dialog" aria-modal="true" aria-labelledby="new-order-title" onSubmit={submit} onMouseDown={(e) => e.stopPropagation()}>
-        <div className={styles.dialogHead}>
-          <div><span className={styles.eyebrow}>First production record</span><h2 id="new-order-title">Create a job order</h2><p>Start with the customer and add every project included in this order.</p></div>
-          <button type="button" onClick={close} aria-label="Close new job order"><X size={18} /></button>
-        </div>
-        <div className={styles.formGrid}>
-          <label>Customer<input required autoFocus value={form.customer} onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'customer', value: e.target.value })} placeholder="Customer or organization" /></label>
-          <label>Order title<input required value={form.title} onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'title', value: e.target.value })} placeholder="What is this job for?" /></label>
-          <label>Due date<input required type="date" value={form.dueDate} onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'dueDate', value: e.target.value })} /></label>
-          <label>Priority<select value={form.priority} onChange={(e) => dispatch({ type: 'SET_PRIORITY', value: e.target.value as 'Normal' | "Urgent" })}><option>Normal</option><option>Urgent</option></select></label>
-          <label className={styles.formWide}>Notes<textarea rows={2} value={form.notes} onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'notes', value: e.target.value })} placeholder="Production instructions, approvals, or delivery notes" /></label>
-        </div>
-        <section className={styles.projectDrafts}>
-          <header><div><span className={styles.eyebrow}>Projects</span><h3>{form.projectDrafts.length} {form.projectDrafts.length === 1 ? "project" : 'projects'} in this order</h3></div>
-          <button type="button" className={styles.smallButton} onClick={() => dispatch({ type: 'ADD_PROJECT' })}><Plus size={14} /> Add project</button></header>
-          {form.projectDrafts.map((project, index) => (
-            <div className={styles.projectDraft} key={index}>
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <label>Description<input required value={project.name} onChange={(e) => dispatch({ type: 'UPDATE_PROJECT', index, field: 'name', value: e.target.value })} placeholder="e.g. Home jersey set" /></label>
-              <label>Type<select value={project.type} onChange={(e) => dispatch({ type: 'UPDATE_PROJECT', index, field: 'type', value: e.target.value })}><option>Jersey Set</option><option>Jersey Upper</option><option>Polo</option><option>T-shirt</option><option>Tarpaulin</option><option>Custom item</option></select></label>
-              <label>Quantity<input required min={1} type="number" value={project.quantity} onChange={(e) => dispatch({ type: 'UPDATE_PROJECT', index, field: 'quantity', value: Number(e.target.value) })} /></label>
-              <label>Route<select value={project.route} onChange={(e) => dispatch({ type: 'UPDATE_PROJECT', index, field: 'route', value: e.target.value })}><option>Full Apparel</option><option>Print & Press</option><option>Print Only / DTF</option><option>Subcon</option><option>Tarpaulin</option></select></label>
-              <button type="button" disabled={form.projectDrafts.length === 1} onClick={() => dispatch({ type: 'REMOVE_PROJECT', index })} aria-label={"Remove project " + (index + 1)}><X size={15} /></button>
-            </div>
-          ))}
-        </section>
-        <div className={styles.dialogActions}><button type="button" className={styles.ghostButton} onClick={close}>Cancel</button><button type="submit" className={styles.primaryButton}>Create job order <ArrowRight size={16} /></button></div>
-      </form>
-    </div>
+    <Dialog open onOpenChange={(open) => { if (!open) close(); }}>
+      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-[920px]" showCloseButton>
+        <form onSubmit={submit}>
+          <DialogHeader>
+            <span className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">First production record</span>
+            <DialogTitle>Create a job order</DialogTitle>
+            <DialogDescription>Start with the customer and describe the work in the overview. Projects can be added afterwards.</DialogDescription>
+          </DialogHeader>
+          <div className="mt-3 grid grid-cols-2 gap-3 max-[600px]:grid-cols-1">
+            <Label className="col-span-1">Customer<Input required autoFocus value={form.customer} onChange={(e) => set('customer', e.target.value)} placeholder="Customer or organization" /></Label>
+            <Label>Order title<Input required value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="What is this job for?" /></Label>
+            <Label>Category
+              <Select value={form.category} onValueChange={(v) => onCategoryChange(v ?? '')}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {categories.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                  <SelectItem value={ADD_OPTION}>+ Add new category…</SelectItem>
+                </SelectContent>
+              </Select>
+            </Label>
+            <Label>Order type
+              <Select value={form.orderType} onValueChange={(v) => onOrderTypeChange(v ?? '')}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(orderTypes[form.category] ?? []).map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                  <SelectItem value={ADD_OPTION}>+ Add new order type…</SelectItem>
+                </SelectContent>
+              </Select>
+            </Label>
+            <Label>Contact<Input value={form.contact} onChange={(e) => set('contact', e.target.value)} placeholder="FB name, email, link, or number" /></Label>
+            <Label>Due date<Input required type="date" value={form.dueDate} onChange={(e) => set('dueDate', e.target.value)} /></Label>
+            <Label>Priority
+              <Select value={form.priority} onValueChange={(v) => set('priority', (v ?? 'Normal') as 'Normal' | 'Urgent')}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Normal">Normal</SelectItem>
+                  <SelectItem value="Urgent">Urgent</SelectItem>
+                </SelectContent>
+              </Select>
+            </Label>
+          </div>
+          <div className="mt-4 grid gap-1.5">
+            <span className="text-xs font-bold text-foreground">Overview</span>
+            <OverviewEditor initialHtml="" onChange={(html) => set('overview', html)} boxed />
+          </div>
+          <DialogFooter className="mt-5">
+            <Button type="button" variant="ghost" onClick={close}>Cancel</Button>
+            <Button type="submit">Create job order <IconArrowRight size={16} /></Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

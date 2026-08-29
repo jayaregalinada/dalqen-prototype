@@ -1,9 +1,4 @@
-import type { Role, User, Variant } from "../shared/types";
-export const variants: Array<{ key: Variant; name: string; note: string }> = [
-  { key: "A", name: "Dispatch Board", note: "Flow-first · shop floor" },
-  { key: "B", name: "Ops Console", note: "Dense · manager overview" },
-  { key: "C", name: "Digital Job Jacket", note: "Order-first · physical metaphor" },
-];
+import type { Role, User } from "../shared/types";
 export const roleDefs: Array<{ key: Role; label: string; stages: string[] }> = [
   { key: "owner", label: "Workspace Owner", stages: [] },
   { key: "artist", label: "Artist", stages: ["Layout", "Sizing"] },

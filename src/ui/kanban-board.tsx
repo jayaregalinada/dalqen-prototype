@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { Link } from '../ui/link';
 import { Status } from '../ui/status';
-import type { PrototypeProps, DemoProject } from '../shared/types';
-import styles from '../prototype.module.css';
+import { Card, CardContent } from '@/components/ui/card';
+import type { PrototypeProps } from '../shared/types';
 
 const activeStages = ['Layout', 'Approval', 'Working Doc', 'Sizing', 'Printing', 'Heatpress', 'Sewing', 'QC', 'For Release'];
 
@@ -18,36 +18,40 @@ export function KanbanBoard({ props }: { props: PrototypeProps }) {
   }, [projects]);
 
   if (projects.length === 0) {
-    return <div className={styles.standardScreen}><p className={styles.emptyKanban}>No projects yet. Create a job order to get started.</p></div>;
+    return <p className="py-10 text-center text-sm text-muted-foreground">No projects yet. Create a job order to get started.</p>;
   }
 
   return (
-    <div className={styles.kanbanBoard}>
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 py-1">
       {activeStages.map((stage) => {
         const cards = columns[stage];
         if (!cards || cards.length === 0) return null;
         return (
-          <div key={stage} className={styles.kanbanColumn}>
-            <header className={styles.kanbanColumnHeader}>
+          <div key={stage} className="flex flex-col gap-2">
+            <header className="flex items-center justify-between rounded-lg bg-accent p-2 text-xs font-bold uppercase tracking-[0.04em]">
               <span>{stage}</span>
-              <small>{cards.length}</small>
+              <small className="grid size-[22px] place-items-center rounded-full bg-border font-mono">{cards.length}</small>
             </header>
-            <div className={styles.kanbanCards}>
+            <div className="flex flex-col gap-1.5">
               {cards.map((card) => (
-                <Link key={card.order + '-' + card.project} href={props.href('project')} className={styles.kanbanCard}>
-                  <div className={styles.kanbanCardHead}>
-                    <strong>{card.project}</strong>
-                    <Status tone={
-                      card.flag === 'Rework' ? 'danger' :
-                      card.flag === 'Unassigned' ? 'warning' :
-                      'success'
-                    }>{card.flag}</Status>
-                  </div>
-                  <div className={styles.kanbanCardMeta}>
-                    <span className={styles.mono}>{card.order}</span>
-                    <span>{card.owner}</span>
-                    <span>{card.due}</span>
-                  </div>
+                <Link key={card.order + '-' + card.project} href={props.projectHref(card.order, card.projectName)}>
+                  <Card className="transition-shadow hover:shadow-md">
+                    <CardContent className="flex flex-col gap-2 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <strong className="text-[13px] font-semibold">{card.project}</strong>
+                        <Status tone={
+                          card.flag === 'Rework' ? 'danger' :
+                          card.flag === 'Unassigned' ? 'warning' :
+                          'success'
+                        }>{card.flag}</Status>
+                      </div>
+                      <div className="flex gap-2.5 text-xs text-muted-foreground">
+                        <span className="font-mono">{card.order}</span>
+                        <span>{card.owner}</span>
+                        <span>{card.due}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </Link>
               ))}
             </div>
