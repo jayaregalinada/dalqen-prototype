@@ -7,19 +7,19 @@ import { useSharedDemoState } from '../hooks/use-shared-demo-state';
 import { usePrototypeWorkspace } from '../hooks/use-prototype-workspace';
 import { SharedDemoControls } from '../ui/shared-demo-controls';
 import { NewJobOrderDialog } from '../dialogs/new-job-order-dialog';
-import { AssignArtistDialog } from '../dialogs/assign-artist-dialog';
 import { ReworkDialog } from '../dialogs/rework-dialog';
 import { UserSwitcherDialog } from '../dialogs/user-switcher-dialog';
 import { DispatchBoard } from '../dispatch/dispatch-board';
 import { AddProjectDialog } from '../dialogs/add-project-dialog';
+import { ConfirmActionDialog } from '../ui/confirm-action-dialog';
 import '../globals.css';
 
 type DialogState = {
   reworkOpen: boolean;
-  assignmentOpen: boolean;
   userSwitcherOpen: boolean;
   newOrderOpen: boolean;
   addProjectOpen: boolean;
+  resetWorkspaceOpen: boolean;
 };
 
 type DialogAction =
@@ -39,10 +39,10 @@ function dialogReducer(state: DialogState, action: DialogAction): DialogState {
 
 const initialDialogs: DialogState = {
   reworkOpen: false,
-  assignmentOpen: false,
   userSwitcherOpen: false,
   newOrderOpen: false,
   addProjectOpen: false,
+  resetWorkspaceOpen: false,
 };
 
 export function OperationsPrototype() {
@@ -51,8 +51,8 @@ export function OperationsPrototype() {
   const pathname = window.location.pathname;
   const rawScreen = params.get('screen');
   const rawMode = params.get('mode');
-  const screen: Screen = rawScreen === 'orders' || rawScreen === 'order' || rawScreen === 'project' ? rawScreen : 'dashboard';
-  const queueMode: QueueMode = rawMode === 'projects' ? 'projects' : rawMode === 'kanban' ? 'kanban' : 'orders';
+  const screen: Screen = rawScreen === 'orders' || rawScreen === 'order' ? rawScreen : 'dashboard';
+  const queueMode: QueueMode = rawMode === 'kanban' ? 'kanban' : 'orders';
   const rawUser = params.get('user');
   const user: User = users.find((u) => u.id === rawUser) ?? users[0];
   const { state: sharedState, syncStatus, updateState, resetState } = useSharedDemoState();
@@ -66,7 +66,6 @@ export function OperationsPrototype() {
   const nav = { user, pathname, search };
   const dialogOpeners = {
     openNewOrder: openDialog('newOrderOpen'),
-    openAssignment: openDialog('assignmentOpen'),
     openRework: openDialog('reworkOpen'),
     openUserSwitcher: openDialog('userSwitcherOpen'),
     openAddProject,
@@ -77,11 +76,6 @@ export function OperationsPrototype() {
   const handleCreateOrder = (input: NewOrderInput) => {
     workspace.createOrder(input);
     closeDialog('newOrderOpen')();
-  };
-
-  const handleAssignment = (artist: string, department: string) => {
-    workspace.confirmAssignment(artist, department);
-    closeDialog('assignmentOpen')();
   };
 
   const handleRework = (targetStage: string, reason: string) => {
@@ -111,20 +105,18 @@ export function OperationsPrototype() {
       <SharedDemoControls
         status={syncStatus}
         canReset={workspace.canCreateOrder}
-        onReset={() => {
-          if (window.confirm('Delete every job order and return the shared workspace to a first-time state?')) {
-            void resetState();
-          }
-        }}
+        onReset={openDialog('resetWorkspaceOpen')}
+      />
+      <ConfirmActionDialog
+        open={dialogs.resetWorkspaceOpen}
+        title="Reset shared workspace?"
+        description="Delete every job order and return the shared workspace to a first-time state. This cannot be undone."
+        confirmLabel="Reset workspace"
+        variant="destructive"
+        onOpenChange={(open) => dispatchDialog({ type: open ? 'OPEN' : 'CLOSE', dialog: 'resetWorkspaceOpen' })}
+        onConfirm={() => { void resetState(); }}
       />
       {dialogs.newOrderOpen && <NewJobOrderDialog close={closeDialog('newOrderOpen')} create={handleCreateOrder} categories={sharedState.categories} orderTypes={sharedState.orderTypes} addCategory={handleAddCategory} addOrderType={handleAddOrderType} />}
-      {dialogs.assignmentOpen && workspace.currentProject && (
-        <AssignArtistDialog
-          project={workspace.currentProject}
-          close={closeDialog('assignmentOpen')}
-          assign={handleAssignment}
-        />
-      )}
       {dialogs.reworkOpen && <ReworkDialog currentStage={workspace.stage} close={closeDialog('reworkOpen')} confirm={handleRework} />}
       {dialogs.userSwitcherOpen && (
         <UserSwitcherDialog user={user} close={closeDialog('userSwitcherOpen')} select={workspace.selectUser} />

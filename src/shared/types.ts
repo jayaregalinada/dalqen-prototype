@@ -1,21 +1,19 @@
 import type { DemoComment, DemoOrder, DemoProject, NewOrderInput, SyncStatus } from "../hooks/use-shared-demo-state";
 export type { DemoComment, DemoOrder, DemoProject, NewOrderInput, SyncStatus };
-export type Screen = "dashboard" | "orders" | "order" | "project";
-export type QueueMode = 'orders' | 'projects' | 'kanban';
+export type Screen = "dashboard" | "orders" | "order";
+export type QueueMode = 'orders' | 'kanban';
 export type Role = "owner" | "artist" | "sewer" | "heatpress" | "qc";
 export type User = { id: string; name: string; role: Role; initials: string; dept: string | null };
-export type OrderRow = { ref: string; title: string; customer: string; due: string; progress: string; status: string; priority: string };
-export type ProjectRow = { project: string; projectName: string; order: string; stage: string; owner: string; dept: string; due: string; flag: string };
-export type ProjectCard = { id: string; name: string; detail: string; type: string; quantity: number; route: string; custom: Record<string, string>; stage: string; owner: string; dept: string; due: string; paid: boolean; tone: string };
-export type DashboardStats = { overdue: number; dueToday: number; waiting: number; qcIssues: number; ready: number; activeProjects: number; released: number };
+export type OrderRow = { ref: string; title: string; customer: string; due: string; stage: string; status: string; priority: string };
+export type DashboardStats = { overdue: number; dueToday: number; waiting: number; qcIssues: number; ready: number; activeOrders: number; released: number };
 export type PrototypeProps = {
   user: User; canCreateOrder: boolean; screen: Screen; queueMode: QueueMode;
   stage: string; qcStatus: 'Pending' | 'Passed' | 'Issue'; notice: string;
-  currentOrder?: DemoOrder; currentProject?: DemoProject;
-  orderRows: OrderRow[]; projectRows: ProjectRow[]; projects: ProjectCard[]; stats: DashboardStats;
+  currentOrder?: DemoOrder; lineUpItems: DemoProject[];
+  orderRows: OrderRow[]; stats: DashboardStats;
   href: (screen: Screen, mode?: QueueMode) => string; setQueueMode: (mode: QueueMode) => void;
   openNewOrder: () => void; advanceStage: () => void; passQc: () => void;
-  openAssignment: () => void; openRework: () => void; openUserSwitcher: () => void;
+  openRework: () => void; openUserSwitcher: () => void;
   openAddProject: (columns: string[]) => void;
   updateOrder: (orderId: string, patch: Partial<DemoOrder>) => void;
   removeItem: (orderId: string, projectId: string) => void;
@@ -23,8 +21,7 @@ export type PrototypeProps = {
   categories: string[]; orderTypes: Record<string, string[]>;
   lineUpTemplates: Record<string, string[]>;
   saveLineUpTemplate: (name: string, columns: string[], orderId?: string) => void;
-  orderAccessDenied: boolean; projectAccessDenied: boolean;
+  orderAccessDenied: boolean;
   syncStatus: SyncStatus;
   orderHref: (orderRef: string) => string;
-  projectHref: (orderRef: string, projectName: string) => string;
 };

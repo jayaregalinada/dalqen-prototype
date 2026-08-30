@@ -4,14 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 export type DemoProject = {
   id: string;
   name: string;
-  type: string;
-  quantity: number;
-  route: string;
-  stage: string;
-  assignee: string;
-  department: string;
-  paid: boolean;
-  qcStatus: 'Pending' | 'Passed' | 'Issue';
   custom: Record<string, string>; // Line Up template/order column values for this item
 };
 
@@ -21,6 +13,31 @@ export type DemoComment = {
   html: string; // sanitized rich text (Overview-style editor output)
   createdAt: string;
 };
+
+export type DemoDesign = {
+  id: string;
+  name: string;
+  url: string; // data URL or bucket path for preview
+  size: number; // file size in bytes (dedup guard)
+  uploadedBy: string;
+  createdAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectReason: string | null;
+  viewedBy: string | null; // admin who last opened the preview
+  viewedAt: string | null;
+  downloadedBy: string | null; // admin who last downloaded the file
+  downloadedAt: string | null;
+};
+
+export type OrderDesignState = 'none' | 'pending' | 'approved' | 'rejected';
+/** Derived order-level design state from per-design statuses — never stored. */
+export function orderDesignState(order: Pick<DemoOrder, 'designs'>): OrderDesignState {
+  const designs = order.designs ?? [];
+  if (designs.length === 0) return 'none';
+  if (designs.some((d) => d.status === 'approved')) return 'approved';
+  if (designs.some((d) => d.status === 'rejected')) return 'rejected';
+  return 'pending';
+}
 
 export type DemoOrder = {
   id: string;
@@ -36,9 +53,13 @@ export type DemoOrder = {
   createdAt: string;
   discussion: DemoComment[]; // Jira-style comment thread
   assignedArtistId: string; // "" = none; the artist who can see this order and join its discussion
+  stage: string; // order-level progress stage (progress lives on the order, not on items)
+  qcStatus: 'Pending' | 'Passed' | 'Issue';
   projects: DemoProject[];
   lineUpTemplateName: string; // which saved template this order's Line Up uses
   lineUpColumns: string[]; // per-order columns added on top of the chosen template
+  removedLineUpColumns: string[]; // template columns the order deviates from (hidden for this order only)
+  designs: DemoDesign[]; // versioned uploads for Approval gate
 };
 
 export type DemoState = {
@@ -53,7 +74,7 @@ export type DemoState = {
 export const defaultCategories = ['Apparel', 'Print', 'Tarpaulin', 'Custom'];
 export const defaultLineUpTemplates: Record<string, string[]> = {
   Jersey: ['Jersey Name', 'Number', 'Upper', 'Lower', 'Warmer', 'Label'],
-  Blank: ['Description'],
+  Blank: [],
 };
 export const defaultOrderTypes: Record<string, string[]> = {
   Apparel: ['Jersey Set', 'Jersey Upper', 'Polo', 'T-shirt'],
@@ -62,8 +83,8 @@ export const defaultOrderTypes: Record<string, string[]> = {
   Custom: ['Custom item'],
 };
 
-export type NewOrderInput = Omit<DemoOrder, 'id' | 'ref' | 'createdAt' | 'projects' | 'lineUpColumns' | 'lineUpTemplateName' | 'discussion' | 'assignedArtistId'> & {
-  projects: Array<Pick<DemoProject, 'name' | 'type' | 'quantity' | 'route'>>;
+export type NewOrderInput = Omit<DemoOrder, 'id' | 'ref' | 'createdAt' | 'projects' | 'lineUpColumns' | 'removedLineUpColumns' | 'lineUpTemplateName' | 'discussion' | 'assignedArtistId' | 'stage' | 'qcStatus' | 'designs'> & {
+  projects: Array<{ name: string; custom: Record<string, string> }>;
 };
 
 export type SyncStatus = 'connecting' | 'live' | 'saving' | 'error' | 'unconfigured';
@@ -78,7 +99,7 @@ export const defaultDemoState: DemoState = {
 };
 
 const allowedStages = new Set([
-  'Layout', 'Approval', 'Working Doc', 'Sizing', 'Printing',
+  'Layout', 'Approval', 'Document', 'Sizing', 'Printing',
   'Heatpress', 'Sewing', 'QC', 'For Release', 'Completed',
 ]);
 
@@ -89,6 +110,13 @@ const supabase = supabaseUrl && supabasePublishableKey
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     })
   : null;
+
+// Design files uploaded in offline demo mode are inline data URLs. Full-resolution
+// PNGs routinely exceed 500KB of base64 — a 500k cap silently lopped off ~75% of
+// uploaded images (the DB stored the truncated prefix, so the loss was permanent).
+// Cap at a bound that fits real designs AND the PostgREST request-body limit; the
+// upload path rejects anything larger instead of truncating.
+export const DESIGN_URL_MAX_CHARS = 30_000_000;
 
 function safeText(value: unknown, max = 160): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -115,23 +143,48 @@ function normalizeProject(value: unknown): DemoProject | null {
   const project = value as Partial<DemoProject>;
   const name = safeText(project.name);
   if (!name) return null;
-  const stage = safeText(project.stage);
   return {
     id: safeText(project.id, 80) || crypto.randomUUID(),
     name,
-    type: safeText(project.type) || 'Custom item',
-    quantity: Number.isFinite(project.quantity) ? Math.max(1, Math.min(99999, Number(project.quantity))) : 1,
-    route: safeText(project.route) || 'Full Apparel',
-    stage: allowedStages.has(stage) ? stage : 'Layout',
-    assignee: safeText(project.assignee) || 'Unassigned',
-    department: safeText(project.department) || 'Layout',
-    paid: project.paid === true,
-    qcStatus: project.qcStatus === 'Passed' || project.qcStatus === 'Issue' ? project.qcStatus : 'Pending',
     custom: plainStringRecord(project.custom),
   };
 }
 
-// Jira-style discussion comments: sanitized rich text bodies, author + timestamp.
+function normalizeDesigns(value: unknown, legacy?: { status?: string; reason?: unknown }): DemoDesign[] {
+  if (!Array.isArray(value)) return [];
+  const designs = value
+    .map((d) => {
+      if (!d || typeof d !== 'object') return null;
+      const design = d as Partial<DemoDesign>;
+      const url = safeText(design.url, DESIGN_URL_MAX_CHARS);
+      if (!url) return null;
+      return {
+        id: safeText(design.id, 80) || crypto.randomUUID(),
+        name: safeText(design.name, 120) || 'design',
+        url,
+        size: Number.isFinite(design.size) ? Math.max(0, Math.floor(Number(design.size))) : 0,
+        uploadedBy: safeText(design.uploadedBy, 60) || 'unknown',
+        createdAt: safeText(design.createdAt, 40) || new Date().toISOString(),
+        status: design.status === 'approved' || design.status === 'rejected' ? design.status : 'pending',
+        rejectReason: safeText(design.rejectReason, 400) || null,
+        viewedBy: safeText(design.viewedBy, 60) || null,
+        viewedAt: safeText(design.viewedAt, 40) || null,
+        downloadedBy: safeText(design.downloadedBy, 60) || null,
+        downloadedAt: safeText(design.downloadedAt, 40) || null,
+      };
+    })
+    .filter((d): d is DemoDesign => d !== null);
+  // One-time migration from the pre-per-design order-level flags: apply them to
+  // the newest design when no design carries a decision yet. The order-level
+  // fields are dropped from the persisted state on the next save.
+  if ((legacy?.status === 'approved' || legacy?.status === 'rejected') && designs.length > 0 && designs.every((d) => d.status === 'pending')) {
+    const target = designs[designs.length - 1];
+    target.status = legacy.status;
+    if (legacy.status === 'rejected') target.rejectReason = safeText(legacy.reason, 400) || null;
+  }
+  return designs;
+}
+
 function normalizeDiscussion(value: unknown): DemoComment[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -171,8 +224,35 @@ function normalizeOrder(value: unknown): DemoOrder | null {
     discussion: normalizeDiscussion(order.discussion),
     assignedArtistId: safeText(order.assignedArtistId, 80),
     projects: Array.isArray(order.projects) ? order.projects.map(normalizeProject).filter((item): item is DemoProject => item !== null) : [],
+    stage: (() => {
+      // progress lives on the order: prefer an explicit order-level stage, else derive
+      // from the most-advanced legacy item so pre-migration orders keep their progress
+      const rawStage = safeText(order.stage, 60);
+      // pre-rename rows may still persist the legacy label; normalize it
+      const explicit = rawStage === 'Working Doc' ? 'Document' : rawStage;
+      if (allowedStages.has(explicit)) return explicit;
+      const legacy = Array.isArray(order.projects)
+        ? order.projects
+            .map((p) => {
+              const s = p && typeof p === 'object' ? safeText((p as { stage?: unknown }).stage) : '';
+              return s === 'Working Doc' ? 'Document' : s;
+            })
+            .filter((s) => allowedStages.has(s))
+            .sort((a, b) => [...allowedStages].indexOf(a) - [...allowedStages].indexOf(b))
+        : [];
+      return legacy[legacy.length - 1] ?? 'Layout';
+    })(),
+    qcStatus: order.qcStatus === 'Passed' || order.qcStatus === 'Issue' ? order.qcStatus : 'Pending',
     lineUpTemplateName: safeText(order.lineUpTemplateName, 40),
     lineUpColumns: uniqNames(order.lineUpColumns).slice(0, 8),
+    removedLineUpColumns: uniqNames(order.removedLineUpColumns).slice(0, 8),
+    designs: normalizeDesigns(
+      (order as unknown as { designs?: unknown }).designs,
+      {
+        status: safeText((order as unknown as { designStatus?: unknown }).designStatus, 20),
+        reason: (order as unknown as { designRejectionReason?: unknown }).designRejectionReason,
+      },
+    ),
   };
 }
 
@@ -254,7 +334,17 @@ export function useSharedDemoState() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'prototype_demo_state', filter: 'id=eq.global' },
         (payload) => {
-          setState(normalizeState((payload.new as { state?: unknown }).state));
+          // Realtime UPDATE payloads for this table carry only {id, updated_at}
+          // (the big jsonb column is omitted). Applying normalizeState(undefined)
+          // here reset every open browser to the empty workspace — "Order not found".
+          // Only apply payloads that provably carry order data.
+          const next = payload.new;
+          if (next && typeof next === 'object' && 'state' in next) {
+            const s = next.state;
+            if (s && typeof s === 'object' && Array.isArray(s.orders)) {
+              setState(normalizeState(s));
+            }
+          }
           setSyncStatus('live');
         },
       )

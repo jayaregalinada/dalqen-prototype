@@ -6,8 +6,12 @@ import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 
 import { BUCKET, canonicalizeStorageImages, resolveStorageImages, uploadImage } from '../shared/image-storage';
-import { cn } from '@/lib/utils';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { ButtonGroup } from '@/components/ui/button-group';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 // ponytail: TipTap StarterKit (v3) bundles underline; ProseMirror owns the editable DOM, so
 // React re-renders can never clobber editor content (the bug that wiped dialog overviews).
@@ -125,7 +129,7 @@ export function OverviewEditor({
     if (file) void insertUpload(file);
   };
 
-  if (!editor) return <div className={cn('rounded-[10px]', boxed && 'border bg-card p-3', className)} />;
+  if (!editor) return <Skeleton className={cn('h-[136px]', className)} />;
 
   const actions: ToolbarAction[] = [
     { icon: <IconBold size={14} />, label: 'Bold', active: editor.isActive('bold'), run: () => editor.chain().focus().toggleBold().run() },
@@ -137,32 +141,30 @@ export function OverviewEditor({
   ];
 
   const toolbar = (
-    <div className="flex gap-1">
-      {actions.map((a) => (
+    <ButtonGroup aria-label="Text formatting">
+      {actions.map((action) => (
         <Button
-          key={a.label}
+          key={action.label}
           type="button"
-          variant="ghost"
+          variant={action.active ? 'secondary' : 'ghost'}
           size="icon"
-          title={a.label}
-          aria-label={a.label}
-          aria-pressed={a.active}
-          data-active={a.active}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={a.run}
-          className="text-muted-foreground data-active:bg-accent data-active:text-accent-foreground"
+          title={action.label}
+          aria-label={action.label}
+          aria-pressed={action.active}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={action.run}
         >
-          {a.icon}
+          {action.icon}
         </Button>
       ))}
-      <input
+      <Input
         ref={fileRef}
         type="file"
         accept="image/*"
         hidden
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) void insertUpload(f); e.target.value = ''; }}
+        onChange={(event) => { const file = event.target.files?.[0]; if (file) void insertUpload(file); event.target.value = ''; }}
       />
-    </div>
+    </ButtonGroup>
   );
 
   return (
@@ -182,7 +184,7 @@ export function OverviewEditor({
       >
         <EditorContent editor={editor} />
       </div>
-      {error && <p role="alert" className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     </>
   );
 }

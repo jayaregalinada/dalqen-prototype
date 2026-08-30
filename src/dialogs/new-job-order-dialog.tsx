@@ -1,12 +1,13 @@
 import { IconArrowRight } from '@tabler/icons-react';
 import { useState, type FormEvent } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import type { NewOrderInput } from '../shared/types';
 import { OverviewEditor } from '../ui/overview-editor';
+import { TextPromptDialog } from '../ui/text-prompt-dialog';
 
 const ADD_OPTION = '__add';
 
@@ -22,6 +23,11 @@ type FormState = {
 };
 
 const defaultDueDate = () => new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+
+type OptionPrompt =
+  | { kind: 'category' }
+  | { kind: 'orderType'; category: string }
+  | null;
 
 type DialogProps = {
   close: () => void;
@@ -43,17 +49,14 @@ export function NewJobOrderDialog({ close, create, categories, orderTypes, addCa
     orderType: 'Jersey Set',
     overview: '',
   });
+  const [optionPrompt, setOptionPrompt] = useState<OptionPrompt>(null);
   const set = <K extends keyof FormState>(field: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const onCategoryChange = (value: string) => {
+    if (!value) return;
     if (value === ADD_OPTION) {
-      const name = window.prompt('New category name');
-      if (name?.trim()) {
-        addCategory(name.trim());
-        set('category', name.trim());
-        set('orderType', '');
-      }
+      setOptionPrompt({ kind: 'category' });
       return;
     }
     set('category', value);
@@ -61,16 +64,29 @@ export function NewJobOrderDialog({ close, create, categories, orderTypes, addCa
   };
 
   const onOrderTypeChange = (value: string) => {
+    if (!value) return;
     if (value === ADD_OPTION) {
-      const name = window.prompt(`New order type for "${form.category}"`);
-      if (name?.trim()) {
-        addOrderType(form.category, name.trim());
-        set('orderType', name.trim());
-      }
+      setOptionPrompt({ kind: 'orderType', category: form.category });
       return;
     }
     set('orderType', value);
   };
+
+  const submitOption = (name: string) => {
+    if (optionPrompt?.kind === 'category') {
+      addCategory(name);
+      set('category', name);
+      set('orderType', '');
+    } else if (optionPrompt?.kind === 'orderType') {
+      addOrderType(optionPrompt.category, name);
+      set('orderType', name);
+    }
+    setOptionPrompt(null);
+  };
+
+  const categoryOptions = form.category && !categories.includes(form.category) ? [...categories, form.category] : categories;
+  const availableOrderTypes = orderTypes[form.category] ?? [];
+  const orderTypeOptions = form.orderType && !availableOrderTypes.includes(form.orderType) ? [...availableOrderTypes, form.orderType] : availableOrderTypes;
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -88,7 +104,8 @@ export function NewJobOrderDialog({ close, create, categories, orderTypes, addCa
   };
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) close(); }}>
+    <>
+      <Dialog open onOpenChange={(open) => { if (!open) close(); }}>
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-[920px]" showCloseButton>
         <form onSubmit={submit}>
           <DialogHeader>
@@ -96,49 +113,74 @@ export function NewJobOrderDialog({ close, create, categories, orderTypes, addCa
             <DialogTitle>Create a job order</DialogTitle>
             <DialogDescription>Start with the customer and describe the work in the overview. Projects can be added afterwards.</DialogDescription>
           </DialogHeader>
-          <div className="mt-3 grid grid-cols-2 gap-3 max-[600px]:grid-cols-1">
-            <Label className="col-span-1">Customer<Input required autoFocus value={form.customer} onChange={(e) => set('customer', e.target.value)} placeholder="Customer or organization" /></Label>
-            <Label>Order title<Input required value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="What is this job for?" /></Label>
-            <Label>Category
-              <Select value={form.category} onValueChange={(v) => onCategoryChange(v ?? '')}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <FieldGroup className="mt-3 grid grid-cols-2 gap-3 max-[600px]:grid-cols-1">
+            <Field>
+              <FieldLabel htmlFor="new-order-customer">Customer</FieldLabel>
+              <Input id="new-order-customer" required autoFocus value={form.customer} onChange={(event) => set('customer', event.target.value)} placeholder="Customer or organization" />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="new-order-title">Order title</FieldLabel>
+              <Input id="new-order-title" required value={form.title} onChange={(event) => set('title', event.target.value)} placeholder="What is this job for?" />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="new-order-category">Category</FieldLabel>
+              <Select value={form.category} onValueChange={onCategoryChange}>
+                <SelectTrigger id="new-order-category" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {categories.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                  {categoryOptions.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
                   <SelectItem value={ADD_OPTION}>+ Add new category…</SelectItem>
                 </SelectContent>
               </Select>
-            </Label>
-            <Label>Order type
-              <Select value={form.orderType} onValueChange={(v) => onOrderTypeChange(v ?? '')}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="new-order-type">Order type</FieldLabel>
+              <Select value={form.orderType} onValueChange={onOrderTypeChange}>
+                <SelectTrigger id="new-order-type" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {(orderTypes[form.category] ?? []).map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                  {orderTypeOptions.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
                   <SelectItem value={ADD_OPTION}>+ Add new order type…</SelectItem>
                 </SelectContent>
               </Select>
-            </Label>
-            <Label>Contact<Input value={form.contact} onChange={(e) => set('contact', e.target.value)} placeholder="FB name, email, link, or number" /></Label>
-            <Label>Due date<Input required type="date" value={form.dueDate} onChange={(e) => set('dueDate', e.target.value)} /></Label>
-            <Label>Priority
-              <Select value={form.priority} onValueChange={(v) => set('priority', (v ?? 'Normal') as 'Normal' | 'Urgent')}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="new-order-contact">Contact</FieldLabel>
+              <Input id="new-order-contact" value={form.contact} onChange={(event) => set('contact', event.target.value)} placeholder="FB name, email, link, or number" />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="new-order-due-date">Due date</FieldLabel>
+              <Input id="new-order-due-date" required type="date" value={form.dueDate} onChange={(event) => set('dueDate', event.target.value)} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="new-order-priority">Priority</FieldLabel>
+              <Select value={form.priority} onValueChange={(value) => set('priority', value as 'Normal' | 'Urgent')}>
+                <SelectTrigger id="new-order-priority" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Normal">Normal</SelectItem>
                   <SelectItem value="Urgent">Urgent</SelectItem>
                 </SelectContent>
               </Select>
-            </Label>
-          </div>
-          <div className="mt-4 grid gap-1.5">
-            <span className="text-xs font-bold text-foreground">Overview</span>
+            </Field>
+          </FieldGroup>
+          <Field className="mt-4">
+            <FieldLabel>Overview</FieldLabel>
             <OverviewEditor initialHtml="" onChange={(html) => set('overview', html)} boxed />
-          </div>
+          </Field>
           <DialogFooter className="mt-5">
             <Button type="button" variant="ghost" onClick={close}>Cancel</Button>
             <Button type="submit">Create job order <IconArrowRight size={16} /></Button>
           </DialogFooter>
         </form>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+      <TextPromptDialog
+        open={optionPrompt !== null}
+        title={optionPrompt?.kind === 'orderType' ? 'Add order type' : 'Add category'}
+        description={optionPrompt?.kind === 'orderType' ? `Add an order type for ${optionPrompt.category}.` : 'Add a category to the shared workspace.'}
+        label={optionPrompt?.kind === 'orderType' ? 'Order type name' : 'Category name'}
+        submitLabel="Add"
+        onOpenChange={(open) => { if (!open) setOptionPrompt(null); }}
+        onSubmit={submitOption}
+      />
+    </>
   );
 }

@@ -1,9 +1,9 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useRef } from 'react';
 import type { DemoProject, DemoOrder, DemoState, SyncStatus } from './use-shared-demo-state';
 import type { NewOrderInput } from './use-shared-demo-state';
-import type { Screen, QueueMode, OrderRow, ProjectRow, ProjectCard, User, DashboardStats, PrototypeProps } from '../shared/types';
+import type { Screen, QueueMode, OrderRow, User, DashboardStats, PrototypeProps } from '../shared/types';
 import { roleDefs, stages } from '../shared/constants';
-import { formatDate, orderStatus, projectTone, navigateTo } from '../shared/helpers';
+import { formatDate, orderStatus, navigateTo } from '../shared/helpers';
 
 type NavigationConfig = {
   user: User;
@@ -23,7 +23,6 @@ export function usePrototypeWorkspace(
   syncStatus: SyncStatus,
   dialogOpeners: {
     openNewOrder: () => void;
-    openAssignment: () => void;
     openRework: () => void;
     openUserSwitcher: () => void;
     openAddProject: (columns: string[]) => void;
@@ -32,76 +31,51 @@ export function usePrototypeWorkspace(
   const canCreateOrder = user.role === 'owner';
   const roleDef = roleDefs.find((r) => r.key === user.role)!;
 
-  const isVisibleToUser = useCallback(
-    (project: DemoProject) =>
-      user.role === 'owner' || (project.assignee === user.name && roleDef.stages.includes(project.stage)),
-    [user.role, user.name, roleDef.stages],
-  );
-
-  // Owner sees every order, including freshly created ones with zero projects;
-  // team members still only see orders where they're assigned to a project.
-  // Selected order/project come from the URL (?order=JO-0001&project=…). A param that
-  // names an unknown or not-visible order/project "denies" the screen; a missing param
-  // keeps the legacy default of the newest visible order/project.
+  // Owner sees every order; the rest only see orders where they're the assigned artist.
+  // The selected order comes from the URL (?order=JO-0001). A param naming an unknown or
+  // not-visible order "denies" the screen; a missing param keeps the newest visible order.
   const params = new URLSearchParams(nav.search);
   const orderParam = params.get('order');
-  const projectParam = params.get('project');
 
-  // Owner sees every order, including freshly created ones with zero projects;
-  // team members also see orders where they're the assigned artist (they can join
-  // the order's discussion) or assigned to one of the order's projects.
   const visibleOrders = sharedState.orders.filter(
-    (order) =>
-      user.role === 'owner' ||
-      order.assignedArtistId === user.id ||
-      order.projects.some(isVisibleToUser),
+    (order) => user.role === 'owner' || order.assignedArtistId === user.id,
   );
   const selectedOrder = !orderParam
     ? visibleOrders[0]
     : (visibleOrders.find((o) => o.id === orderParam || o.ref === orderParam) ?? null);
   const orderAccessDenied = selectedOrder === null;
   const currentOrder = selectedOrder ?? undefined;
-  const currentOrderProjects = currentOrder?.projects ?? [];
-  const selectedProject = !projectParam
-    ? (currentOrderProjects.find(isVisibleToUser) ?? currentOrderProjects[0])
-    : (currentOrderProjects.find((p) => p.id === projectParam || p.name === projectParam) ?? null);
-  const projectAccessDenied = selectedProject === null;
-  const currentProject = selectedProject ?? undefined;
-  const stage = currentProject?.stage ?? 'Layout';
-  const qcStatus = (currentProject?.qcStatus ?? 'Pending') as 'Pending' | 'Passed' | 'Issue';
+  // Progress lives on the order itself: whoever can see the order sees its full Line Up.
+  const lineUpItems = currentOrder?.projects ?? [];
+  const stage = currentOrder?.stage ?? 'Layout';
+  const qcStatus = (currentOrder?.qcStatus ?? 'Pending') as 'Pending' | 'Passed' | 'Issue';
   const notice = sharedState.notice;
+  // State writes can fire from delayed closures (e.g. the 1s-debounced Line Up draft save).
+  // Always merge onto the LATEST state — a render-time snapshot would clobber newer writes.
+  const sharedStateRef = useRef(sharedState);
+  sharedStateRef.current = sharedState;
+  const currentOrderRef = useRef(currentOrder);
+  currentOrderRef.current = currentOrder;
 
   const href = useCallback(
     (target: Screen, mode?: QueueMode) => {
       const query = new URLSearchParams();
       query.set('screen', target);
       if (mode) query.set('mode', mode);
-      if ((target === 'order' || target === 'project') && currentOrder) query.set('order', currentOrder.ref);
-      if (target === 'project' && currentProject) query.set('project', currentProject.name);
+      if (target === 'order' && currentOrder) query.set('order', currentOrder.ref);
       query.set('user', user.id);
       return `${nav.pathname}?${query.toString()}`;
     },
-    [nav.pathname, user.id, currentOrder, currentProject],
+    [nav.pathname, user.id, currentOrder],
   );
 
-  // Links that point at a SPECIFIC order/project (rows, kanban cards, fresh creation)
+  // Links that point at a SPECIFIC order (rows, kanban cards, fresh creation)
   // — independent of whatever is currently selected.
   const orderHref = useCallback(
     (orderRef: string) => {
       const query = new URLSearchParams();
       query.set('screen', 'order');
       query.set('order', orderRef);
-      query.set('user', user.id);
-      return `${nav.pathname}?${query.toString()}`;
-    },
-    [nav.pathname, user.id],
-  );
-  const projectHref = useCallback(
-    (orderRef: string, projectName: string) => {
-      const query = new URLSearchParams();
-      query.set('screen', 'project');
-      query.set('order', orderRef);
-      query.set('project', projectName);
       query.set('user', user.id);
       return `${nav.pathname}?${query.toString()}`;
     },
@@ -115,140 +89,89 @@ export function usePrototypeWorkspace(
         title: order.title,
         customer: order.customer,
         due: formatDate(order.dueDate),
-        progress: `${order.projects.filter((p) => p.stage === 'Completed').length} / ${order.projects.length}`,
+        stage: order.stage, // progress now lives on the order (the stage rail)
         status: orderStatus(order),
         priority: order.priority,
       })),
     [visibleOrders],
   );
 
-  const projectRows: ProjectRow[] = useMemo(
-    () =>
-      visibleOrders.flatMap((order) =>
-        order.projects.filter(isVisibleToUser).map((project) => ({
-          project: `${project.name} \u00b7 ${project.quantity}`,
-          projectName: project.name,
-          order: order.ref,
-          stage: project.stage,
-          owner: project.assignee,
-          dept: project.department,
-          due: formatDate(order.dueDate),
-          flag: project.qcStatus === 'Issue' ? 'Rework' : project.assignee === 'Unassigned' ? 'Unassigned' : 'On track',
-        })),
-      ),
-    [visibleOrders, isVisibleToUser],
-  );
-
-  const projects: ProjectCard[] = useMemo(() => {
-    // Owner and the order's assigned artist see every Line Up item; other team
-    // members only see projects explicitly assigned to them.
-    const canSeeAll = user.role === 'owner' || currentOrder?.assignedArtistId === user.id;
-    const list = canSeeAll
-      ? (currentOrder?.projects ?? [])
-      : (currentOrder?.projects.filter(isVisibleToUser) ?? []);
-    return list.map((project) => ({
-      id: project.id,
-      name: project.name,
-      detail: `${project.quantity} ${project.type}`,
-      type: project.type,
-      quantity: project.quantity,
-      route: project.route,
-      custom: project.custom,
-      stage: project.stage,
-      owner: project.assignee,
-      dept: project.department,
-      due: formatDate(currentOrder?.dueDate ?? ''),
-      paid: project.paid,
-      tone: projectTone(project),
-    }));
-  }, [currentOrder, isVisibleToUser, user.role, user.id]);
-
   const today = new Date().toISOString().slice(0, 10);
-  const visibleProjects = visibleOrders.flatMap((order) => order.projects.filter(isVisibleToUser));
 
   const stats: DashboardStats = useMemo(
     () => ({
       overdue: visibleOrders.filter((o) => o.dueDate && o.dueDate < today && orderStatus(o) !== 'Released').length,
       dueToday: visibleOrders.filter((o) => o.dueDate === today).length,
-      waiting: visibleProjects.filter((p) => p.stage === 'Approval').length,
-      qcIssues: visibleProjects.filter((p) => p.qcStatus === 'Issue').length,
-      ready: visibleProjects.filter((p) => p.stage === 'For Release').length,
-      activeProjects: visibleProjects.filter((p) => p.stage !== 'Completed').length,
-      released: visibleProjects.filter((p) => p.stage === 'Completed').length,
+      waiting: visibleOrders.filter((o) => o.stage === 'Approval').length,
+      qcIssues: visibleOrders.filter((o) => o.qcStatus === 'Issue').length,
+      ready: visibleOrders.filter((o) => o.stage === 'For Release').length,
+      activeOrders: visibleOrders.filter((o) => o.stage !== 'Completed').length,
+      released: visibleOrders.filter((o) => o.stage === 'Completed').length,
     }),
-    [visibleOrders, visibleProjects, today],
+    [visibleOrders, today],
   );
 
-  const updateCurrentProject = useCallback(
-    (changes: Partial<DemoProject>, message: string) => {
-      if (!currentOrder || !currentProject) return;
+  // Order-level actions: progress is tracked per order, not per item.
+  const updateCurrentOrder = useCallback(
+    (changes: Partial<DemoOrder>, message: string) => {
+      const target = currentOrderRef.current;
+      if (!target) return;
+      const state = sharedStateRef.current;
       void updateState({
-        ...sharedState,
+        ...state,
         notice: message,
-        orders: sharedState.orders.map((order) =>
-          order.id === currentOrder.id
-            ? {
-                ...order,
-                projects: order.projects.map((project) =>
-                  project.id === currentProject.id ? { ...project, ...changes } : project,
-                ),
-              }
-            : order,
+        orders: state.orders.map((order) =>
+          order.id === target.id ? { ...order, ...changes } : order,
         ),
       });
     },
-    [currentOrder, currentProject, sharedState, updateState],
+    [updateState],
   );
 
   const advanceStage = useCallback(() => {
     const current = stages.indexOf(stage);
     const next = stages[Math.min(current + 1, stages.length - 1)];
-    updateCurrentProject({ stage: next }, `Project advanced to ${next}. Activity and queue ownership updated.`);
-  }, [stage, updateCurrentProject]);
+    updateCurrentOrder({ stage: next }, `Order advanced to ${next}. Queue and dashboards updated.`);
+  }, [stage, updateCurrentOrder]);
 
   const passQc = useCallback(
-    () => updateCurrentProject({ qcStatus: 'Passed' }, 'QC passed. Release is now available.'),
-    [updateCurrentProject],
-  );
-
-  const confirmAssignment = useCallback(
-    (artist: string, department: string) => {
-      updateCurrentProject({ assignee: artist, department }, `${artist} assigned to ${currentProject?.name ?? 'project'}.`);
-    },
-    [updateCurrentProject, currentProject],
+    () => updateCurrentOrder({ qcStatus: 'Passed' }, 'QC passed. This order is ready for release.'),
+    [updateCurrentOrder],
   );
 
   const confirmRework = useCallback(
     (targetStage: string, reason: string) => {
-      updateCurrentProject(
-        { stage: targetStage, qcStatus: 'Issue', department: targetStage, assignee: 'Unassigned' },
-        `Rework recorded. Project returned to ${targetStage} and followers notified. Reason: ${reason}`,
+      updateCurrentOrder(
+        { stage: targetStage, qcStatus: 'Issue' },
+        `Rework recorded. Order returned to ${targetStage} and followers notified. Reason: ${reason}`,
       );
     },
-    [updateCurrentProject],
+    [updateCurrentOrder],
   );
 
   const setQueueMode = useCallback((mode: QueueMode) => navigateTo(href('orders', mode), true), [href]);
 
   const removeItem = useCallback(
     (orderId: string, projectId: string) => {
+      const state = sharedStateRef.current;
       void updateState({
-        ...sharedState,
-        orders: sharedState.orders.map((order) =>
+        ...state,
+        orders: state.orders.map((order) =>
           order.id === orderId
             ? { ...order, projects: order.projects.filter((p) => p.id !== projectId) }
             : order,
         ),
       });
     },
-    [sharedState, updateState],
+    [updateState],
   );
 
   const moveItemTo = useCallback(
     (orderId: string, projectId: string, toIndex: number) => {
+      const state = sharedStateRef.current;
       void updateState({
-        ...sharedState,
-        orders: sharedState.orders.map((order) => {
+        ...state,
+        orders: state.orders.map((order) => {
           if (order.id !== orderId) return order;
           const idx = order.projects.findIndex((p) => p.id === projectId);
           if (idx < 0) return order;
@@ -259,42 +182,36 @@ export function usePrototypeWorkspace(
         }),
       });
     },
-    [sharedState, updateState],
+    [updateState],
   );
 
   const addProjectToOrder = useCallback(
     (draft: { name: string; custom: Record<string, string> }) => {
-      if (!currentOrder) return;
-      const qty = Number(draft.custom['Number']);
-      const project = {
+      const target = currentOrderRef.current;
+      if (!target) return;
+      const state = sharedStateRef.current;
+      const project: DemoProject = {
         id: crypto.randomUUID(),
         name: draft.name,
-        type: 'Jersey Set',
-        quantity: Number.isFinite(qty) && qty > 0 ? qty : 1,
-        route: 'Full Apparel',
-        stage: 'Layout',
-        assignee: 'Unassigned',
-        department: 'Layout',
-        paid: false,
-        qcStatus: 'Pending' as const,
         custom: draft.custom ?? {},
       };
       void updateState({
-        ...sharedState,
-        notice: `Project "${draft.name}" added to ${currentOrder.ref}.`,
-        orders: sharedState.orders.map((order) =>
-          order.id === currentOrder.id
+        ...state,
+        notice: `Item "${draft.name}" added to ${target.ref}.`,
+        orders: state.orders.map((order) =>
+          order.id === target.id
             ? { ...order, projects: [...order.projects, project] }
             : order,
         ),
       });
     },
-    [currentOrder, sharedState, updateState],
+    [updateState],
   );
 
   const createOrder = useCallback(
     (input: NewOrderInput) => {
-      const nextNumber = sharedState.orders.reduce(
+      const state = sharedStateRef.current;
+      const nextNumber = state.orders.reduce(
         (highest, order) => Math.max(highest, Number(order.ref.match(/\d+/)?.[0] ?? 0)),
         0,
       ) + 1;
@@ -305,27 +222,26 @@ export function usePrototypeWorkspace(
         createdAt: new Date().toISOString(),
         discussion: [],
         lineUpColumns: [],
+        removedLineUpColumns: [],
         lineUpTemplateName: '',
         assignedArtistId: '',
+        stage: 'Layout',
+        qcStatus: 'Pending',
+        designs: [],
         projects: input.projects.map((project) => ({
-          ...project,
           id: crypto.randomUUID(),
-          stage: 'Layout',
-          assignee: 'Unassigned',
-          department: 'Layout',
-          paid: false,
-          qcStatus: 'Pending' as const,
-          custom: {},
+          name: project.name,
+          custom: project.custom ?? {},
         })),
       };
       void updateState({
-        ...sharedState,
-        orders: [order, ...sharedState.orders],
+        ...state,
+        orders: [order, ...state.orders],
         notice: `${order.ref} created.`,
       });
       navigateTo(orderHref(order.ref));
     },
-    [sharedState, updateState, orderHref],
+    [updateState, orderHref],
   );
 
   const selectUser = useCallback(
@@ -339,26 +255,28 @@ export function usePrototypeWorkspace(
 
   const updateOrder = useCallback(
     (orderId: string, patch: Partial<DemoOrder>) => {
+      const state = sharedStateRef.current;
       void updateState({
-        ...sharedState,
-        orders: sharedState.orders.map((order) => (order.id === orderId ? { ...order, ...patch } : order)),
+        ...state,
+        orders: state.orders.map((order) => (order.id === orderId ? { ...order, ...patch } : order)),
       });
     },
-    [sharedState, updateState],
+    [updateState],
   );
 
   const saveLineUpTemplate = useCallback(
     (name: string, columns: string[], orderId?: string) => {
       // single write: saving a template and (optionally) selecting it on an order must not race
+      const state = sharedStateRef.current;
       void updateState({
-        ...sharedState,
-        lineUpTemplates: { ...sharedState.lineUpTemplates, [name]: columns },
+        ...state,
+        lineUpTemplates: { ...state.lineUpTemplates, [name]: columns },
         orders: orderId
-          ? sharedState.orders.map((order) => (order.id === orderId ? { ...order, lineUpTemplateName: name } : order))
-          : sharedState.orders,
+          ? state.orders.map((order) => (order.id === orderId ? { ...order, lineUpTemplateName: name, lineUpColumns: [], removedLineUpColumns: [] } : order))
+          : state.orders,
       });
     },
-    [sharedState, updateState],
+    [updateState],
   );
 
   const props: PrototypeProps = {
@@ -370,17 +288,14 @@ export function usePrototypeWorkspace(
     qcStatus,
     notice,
     currentOrder,
-    currentProject,
+    lineUpItems,
     orderRows,
-    projectRows,
-    projects,
     stats,
     href,
     setQueueMode,
     openNewOrder: dialogOpeners.openNewOrder,
     advanceStage,
     passQc,
-    openAssignment: dialogOpeners.openAssignment,
     openRework: dialogOpeners.openRework,
     openUserSwitcher: dialogOpeners.openUserSwitcher,
     openAddProject: dialogOpeners.openAddProject,
@@ -392,27 +307,20 @@ export function usePrototypeWorkspace(
     lineUpTemplates: sharedState.lineUpTemplates,
     saveLineUpTemplate,
     orderAccessDenied,
-    projectAccessDenied,
     syncStatus,
     orderHref,
-    projectHref,
   };
 
   return {
     canCreateOrder,
     currentOrder,
-    currentProject,
     stage,
     qcStatus,
     notice,
     orderRows,
-    projectRows,
-    projects,
     stats,
     href,
     props,
-    updateCurrentProject,
-    confirmAssignment,
     confirmRework,
     createOrder,
     addProjectToOrder,

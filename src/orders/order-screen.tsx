@@ -1,33 +1,50 @@
-import { IconActivity, IconArrowDown, IconArrowLeft, IconStack2, IconFileText, IconGripVertical, IconMessages, IconDots, IconPencil, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import { IconActivity, IconArrowDown, IconArrowLeft, IconArrowRight, IconStack2, IconFileText, IconGripVertical, IconMessages, IconDots, IconPencil, IconPlus, IconRefresh, IconClipboardCheck, IconTrash, IconX, IconPhoto , IconAlertTriangle} from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { cx, formatDate, orderStatus } from '../shared/helpers';
 import { cn } from '@/lib/utils';
-import type { DemoOrder, PrototypeProps, ProjectCard } from '../shared/types';
+import type { DemoOrder, DemoProject, PrototypeProps } from '../shared/types';
 import { OrderHeader } from '../orders/order-header';
-import { users } from '../shared/constants';
+import { users, stages } from '../shared/constants';
+import { orderDesignState } from '../hooks/use-shared-demo-state';
 import { resolveStorageImages } from '../shared/image-storage';
 import { EmptyWorkspace } from '../ui/empty-workspace';
 import { OverviewEditor } from '../ui/overview-editor';
+import { StageRail } from '../ui/stage-rail';
 import { Status } from '../ui/status';
 import { Link } from '../ui/link';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { ConfirmActionDialog } from '../ui/confirm-action-dialog';
+import { TextPromptDialog } from '../ui/text-prompt-dialog';
+import { DesignsTab } from './designs-tab';
+import { Badge } from '@/components/ui/badge';
 
-const tabs = ['overview', 'projects', 'discussion', 'activity'] as const;
+const tabs = ['overview', 'projects', 'discussion', 'designs', 'activity'] as const;
 type Tab = (typeof tabs)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
   overview: 'Overview',
   projects: 'Line Up',
   discussion: 'Discussion',
+  designs: 'Designs',
   activity: 'Activity',
 };
 
 type LineUpRowDraft = { name?: string; custom?: Record<string, string> };
+type PendingConfirmation =
+  | { kind: 'discardOverview' }
+  | { kind: 'deleteComment'; commentId: string; author: string }
+  | { kind: 'removeLineUpItem'; itemId: string; itemName: string }
+  | null;
+type PendingTextPrompt =
+  | { kind: 'lineUpColumn' }
+  | { kind: 'lineUpTemplate'; defaultValue: string }
+  | null;
 
 export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: string }) {
   const order = props.currentOrder;
@@ -48,6 +65,8 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   const [commentDraft, setCommentDraft] = useState<string | null>(null);
   const [composerKey, setComposerKey] = useState(0);
   const [readComments, setReadComments] = useState<Record<string, string>>({});
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
+  const [pendingTextPrompt, setPendingTextPrompt] = useState<PendingTextPrompt>(null);
   // ref mirrors commentDraft so postComment reads the latest draft even if a re-render
   // (or HMR/resume) left the click handler with a stale closure.
   const commentRef = useRef<string | null>(null);
@@ -80,7 +99,10 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   };
   const cancelOverview = () => {
     if (overviewDraft === null) return;
-    if (overviewDirty && !window.confirm('Discard unsaved overview changes?')) return;
+    if (overviewDirty) {
+      setPendingConfirmation({ kind: 'discardOverview' });
+      return;
+    }
     setOverviewDraft(null);
   };
   // Cmd/Ctrl+S saves, Esc cancels — active only while the overview editor is open.
@@ -101,15 +123,28 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   const isAdmin = props.canCreateOrder;
   if (props.orderAccessDenied) {
     return (
-      <div className="grid min-h-[420px] place-items-center rounded-[20px] border border-dashed bg-card/95 p-12 text-center">
-        <p className="text-sm text-muted-foreground">Order not found — it may have been removed, or you don't have access to it.</p>
-        <Link href={props.href('orders')}><Button variant="secondary" className="mt-4"><IconArrowLeft size={15} /> Back to orders</Button></Link>
-      </div>
+      <Card className="min-h-[420px] grid place-items-center text-center">
+        <CardContent className="grid gap-4">
+          <p className="text-sm text-muted-foreground">Order not found — it may have been removed, or you don't have access to it.</p>
+          <Link href={props.href('orders')}><Button variant="secondary"><IconArrowLeft size={15} /> Back to orders</Button></Link>
+        </CardContent>
+      </Card>
     );
   }
   if (!order) return <EmptyWorkspace openNewOrder={props.openNewOrder} canCreateOrder={props.canCreateOrder} />;
-  const released = order.projects.filter((project) => project.stage === 'Completed').length;
-  const progress = order.projects.length ? Math.round((released / order.projects.length) * 100) : 0;
+  // order-level progress: who can act on the strip below the header
+  const canAdvance = isAdmin || order.assignedArtistId === props.user.id;
+  const canQc = isAdmin || props.user.role === 'qc';
+  const atLastStage = props.stage === 'Completed' || props.stage === stages[stages.length - 1];
+  const releaseGate = props.stage === 'For Release' && props.qcStatus !== 'Passed';
+  const designs = (order as unknown as { designs?: { length: number } })?.designs as unknown as DemoOrder['designs'] ?? [];
+  const designState = orderDesignState(order);
+  const needsDesignForApproval = props.stage === 'Layout' && designs.length === 0;
+  const advanceBlockedByDesign = needsDesignForApproval;
+  const advanceBlockedByApproval = props.stage === 'Approval' && designState !== 'approved';
+  const advanceBlockedByLineUp = props.stage === 'Document' && props.lineUpItems.length === 0;
+  const warnLineUp = props.stage === 'Document' && order.projects.length === 0;
+  const isRevised = props.stage === 'Approval' && designState === 'rejected';
 
   const formatCommentTime = (iso: string) => {
     const d = new Date(iso);
@@ -137,9 +172,8 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   const setComposerDraft = (html: string) => { commentRef.current = html; setCommentDraft(html); };
   const deleteComment = (id: string) => {
     const target = order?.discussion.find((c) => c.id === id);
-    if (!target || !order) return;
-    if (!window.confirm(`Delete comment by ${target.author || 'unknown'}?`)) return;
-    props.updateOrder(order.id, { discussion: order.discussion.filter((c) => c.id !== id) });
+    if (!target) return;
+    setPendingConfirmation({ kind: 'deleteComment', commentId: id, author: target.author || 'unknown' });
   };
 
   // Line Up: the table shows only the template columns + per-order extras. The first column
@@ -151,7 +185,11 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
     ? order.lineUpTemplateName
     : props.lineUpTemplates[order.category] ? order.category : props.lineUpTemplates['Jersey'] ? 'Jersey' : Object.keys(props.lineUpTemplates)[0] ?? '';
   const needsTemplatePick = order.projects.length === 0 && !templatePicked;
-  const lineUpCols = [...new Set([...(props.lineUpTemplates[templateName] ?? []), ...(order.lineUpColumns ?? [])])];
+  const templateCols = props.lineUpTemplates[templateName] ?? [];
+  const removedCols = order.removedLineUpColumns ?? [];
+  const lineUpCols = [...new Set([...templateCols.filter((c) => !removedCols.includes(c)), ...(order.lineUpColumns ?? [])])];
+  // effective columns differ from the stock template → show "(modified)" and invite Save as template
+  const deviated = lineUpCols.length !== templateCols.length || lineUpCols.some((c) => !templateCols.includes(c));
   const busySaving = props.syncStatus === 'saving';
   const cellValue = (item: { id: string; custom: Record<string, string> }, col: string) =>
     lineUpDraft?.[item.id]?.custom?.[col] ?? item.custom?.[col] ?? '';
@@ -192,32 +230,61 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   };
   const editCell = (itemId: string, col: string, value: string) => { setCell(itemId, col, value); scheduleSave(); };
   const editName = (itemId: string, value: string) => { setRow(itemId, { name: value }); scheduleSave(); };
-  const removeLineUpItem = (item: ProjectCard) => {
-    if (!window.confirm(`Remove "${item.name}" from the Line Up?`)) return;
-    setLineUpDraft((prev) => {
-      if (!prev) return prev;
-      const { [item.id]: _removed, ...rest } = prev;
-      return Object.keys(rest).length ? rest : null;
-    });
-    props.removeItem(order.id, item.id);
+  const removeLineUpItem = (item: DemoProject) =>
+    setPendingConfirmation({ kind: 'removeLineUpItem', itemId: item.id, itemName: item.name });
+  const moveLineUpItem = (item: DemoProject, toIndex: number) => props.moveItemTo(order.id, item.id, toIndex);
+  const addLineUpColumn = () => setPendingTextPrompt({ kind: 'lineUpColumn' });
+  const removeLineUpColumn = (col: string) => {
+    if (templateCols.includes(col)) {
+      // removing a stock template column deviates this order from the template
+      props.updateOrder(order.id, {
+        removedLineUpColumns: [...new Set([...removedCols, col])],
+        lineUpColumns: (order.lineUpColumns ?? []).filter((c) => c !== col),
+      });
+    } else {
+      props.updateOrder(order.id, { lineUpColumns: (order.lineUpColumns ?? []).filter((c) => c !== col) });
+    }
   };
-  const moveLineUpItem = (item: ProjectCard, toIndex: number) => props.moveItemTo(order.id, item.id, toIndex);
-  const addLineUpColumn = () => {
-    const name = window.prompt('New column name');
-    if (!name?.trim()) return;
-    if ((order.lineUpColumns ?? []).includes(name.trim())) return;
-    props.updateOrder(order.id, { lineUpColumns: [...(order.lineUpColumns ?? []), name.trim().slice(0, 40)] });
-  };
-  const removeLineUpColumn = (col: string) =>
-    props.updateOrder(order.id, { lineUpColumns: order.lineUpColumns.filter((c) => c !== col) });
   const switchTemplate = (name: string) => {
-    if (!name) return;
-    props.updateOrder(order.id, { lineUpTemplateName: name });
+    if (!name || name === templateName || name === '__save_template__') return;
+    // once items exist the template is locked — only deviations (and Save template) are allowed
+    if (order.projects.length > 0) return;
+    // adopting a template means exactly its columns — drop any deviation overrides
+    props.updateOrder(order.id, { lineUpTemplateName: name, lineUpColumns: [], removedLineUpColumns: [] });
   };
-  const saveAsTemplate = () => {
-    const name = window.prompt('Save these columns as template named:', templateName);
-    if (!name?.trim()) return;
-    props.saveLineUpTemplate(name.trim().slice(0, 40), lineUpCols, order.id);
+  const saveAsTemplate = () => setPendingTextPrompt({ kind: 'lineUpTemplate', defaultValue: deviated ? `${templateName} modified` : templateName });
+
+  const confirmPendingAction = () => {
+    if (pendingConfirmation?.kind === 'discardOverview') {
+      setOverviewDraft(null);
+    } else if (pendingConfirmation?.kind === 'deleteComment') {
+      props.updateOrder(order.id, { discussion: order.discussion.filter((comment) => comment.id !== pendingConfirmation.commentId) });
+    } else if (pendingConfirmation?.kind === 'removeLineUpItem') {
+      setLineUpDraft((prev) => {
+        if (!prev) return prev;
+        const { [pendingConfirmation.itemId]: _removed, ...rest } = prev;
+        return Object.keys(rest).length ? rest : null;
+      });
+      props.removeItem(order.id, pendingConfirmation.itemId);
+    }
+    setPendingConfirmation(null);
+  };
+
+  const submitTextPrompt = (name: string) => {
+    if (pendingTextPrompt?.kind === 'lineUpColumn') {
+      const col = name.slice(0, 40);
+      if (removedCols.includes(col)) {
+        // re-adding a stock template column restores it for this order
+        props.updateOrder(order.id, { removedLineUpColumns: removedCols.filter((c) => c !== col) });
+      } else if (templateCols.includes(col) || (order.lineUpColumns ?? []).includes(col)) {
+        return; // already visible
+      } else {
+        props.updateOrder(order.id, { lineUpColumns: [...(order.lineUpColumns ?? []), col] });
+      }
+    } else if (pendingTextPrompt?.kind === 'lineUpTemplate') {
+      props.saveLineUpTemplate(name.slice(0, 40), lineUpCols, order.id);
+    }
+    setPendingTextPrompt(null);
   };
 
   const saveBrief = () => {
@@ -225,46 +292,59 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
     setBriefDraft(null);
   };
 
-  const lineUpCell = 'w-full min-w-[90px] rounded-[7px] border border-transparent bg-transparent px-[7px] py-[5px] text-[13px] font-normal text-foreground outline-none hover:border-border focus:border-primary focus:bg-background';
-  const rowActionBtn = 'grid size-[30px] place-items-center rounded-lg border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:cursor-default';
-  const smallInput = 'h-[34px] w-full rounded-lg border border-input bg-background px-2.5 text-[13px] outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40';
+  const rowActionBtn = 'border bg-card text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:cursor-default';
 
   return (
     <div className="animate-[enter_580ms_cubic-bezier(0.22,0.75,0.15,1)_both]">
       <OrderHeader props={props} />
+      {/* Order-level progress lives here — not on individual Line Up items anymore */}
+      <section className="mb-4 overflow-hidden rounded-[15px] border bg-card">
+        <StageRail stage={props.stage} compact reviseStage={isRevised ? 'Approval' : null}/>
+        {isRevised && <div className="px-3.5 pb-2"><Badge variant="destructive">Revised · v{designs.length}</Badge></div>}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {canAdvance && <Button type='button' onClick={props.advanceStage} disabled={atLastStage || releaseGate || advanceBlockedByDesign|| advanceBlockedByApproval || advanceBlockedByLineUp} title={releaseGate ? 'QC must pass before release' : advanceBlockedByDesign ? 'Upload a design in Designs tab first' : advanceBlockedByApproval ? 'Approve at least one design first' : advanceBlockedByLineUp ? 'Add at least one Line Up item first' : undefined}><IconArrowRight size={15} /> {props.stage === 'For Release' ? 'Release order' : 'Advance stage'}</Button>}
+            {canQc && props.qcStatus !== 'Passed' && <Button type='button' variant="outline" onClick={props.passQc}><IconClipboardCheck size={15} /> Record QC pass</Button>}
+            {isAdmin && <Button type='button' variant="outline" onClick={props.openRework}><IconRefresh size={15} /> Send back</Button>}
+            {!canAdvance && <span className="text-xs text-muted-foreground">Current stage: <strong className="text-primary">{props.stage}</strong></span>}
+          </div>
+          {releaseGate && <small className="text-xs font-bold text-amber-700">QC must pass before this order can be released.</small>}
+        </div>
+      </section>
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
         <TabsList className="w-full justify-start">
           {tabs.map((tab) => (
-            <TabsTrigger key={tab} value={tab} className="flex h-[38px] items-center gap-2 px-3.5 text-[13px] font-bold text-muted-foreground">              {tab === 'overview' && <IconFileText size={16} />}
+            <TabsTrigger key={tab} value={tab} className="flex h-[38px] items-center gap-2 px-3.5 text-[13px] font-bold text-muted-foreground" title={tab === 'projects' && warnLineUp ? 'Line Up is empty — add items before advancing' : undefined}>              {tab === 'overview' && <IconFileText size={16} />}
               {tab === 'projects' && <IconStack2 size={16} />}
               {tab === 'discussion' && <IconMessages size={16} />}
+              {tab === 'designs' && <IconPhoto size={16} />}
               {tab === 'activity' && <IconActivity size={16} />}
               <span className="capitalize">{TAB_LABELS[tab]}</span>
-              {tab === 'projects' && <span className="inline-grid min-w-[19px] place-items-center rounded-md bg-muted px-1 text-xs font-bold">{order.projects.length}</span>}
+              {tab === 'projects' && warnLineUp && <IconAlertTriangle size={15} className="text-amber-500" aria-label="Line Up is empty" />}
+              {tab === 'projects' && <span className={cn('inline-grid min-w-[19px] place-items-center rounded-md px-1 text-xs font-bold', warnLineUp ? 'bg-amber-100 text-amber-700' : 'bg-muted')}>{order.projects.length}</span>}
               {tab === 'discussion' && <span className="inline-grid min-w-[19px] place-items-center rounded-md bg-muted px-1 text-xs font-bold">{order.discussion.length}</span>}
+              {tab === 'designs' && <span className="inline-grid min-w-[19px] place-items-center rounded-md bg-muted px-1 text-xs font-bold">{designs.length}</span>}
             </TabsTrigger>
           ))}
           <Button type='button' variant="ghost" size="icon" className="ml-auto" aria-label='More order actions'><IconDots size={18} /></Button>
         </TabsList>
-      </Tabs>
       <div className="grid grid-cols-[minmax(0,1fr)_280px] gap-4 pt-4 max-[820px]:grid-cols-1">
-        {activeTab === 'overview' && (
-          // card border stays for every viewer; only the toolbar row (with its bottom line)
-          // is admin-only — non-admins (e.g. the assigned artist) skip it entirely
-          <section className="overflow-hidden rounded-[15px] border bg-card">
-            {/* CardHeader row stays mounted for admin; content swaps: read = Edit button, edit = TipTap toolbar + Save/Cancel */}
-            {isAdmin && overviewDraft === null && (
-              <div className="flex items-center justify-end gap-2 border-b px-4 py-2.5">
+        <TabsContent value="overview">
+          {/* Card border stays for every viewer; only the toolbar row (with its bottom line)
+              is admin-only — non-admins (e.g. the assigned artist) skip it entirely. */}
+          <Card className="mb-0">
+            <CardHeader className="border-b">
+              <CardAction>
                 <Button type='button' variant="outline" onClick={() => setOverviewDraft(order.overview)}><IconPencil size={13} /> Edit overview</Button>
-              </div>
-            )}
+              </CardAction>
+            </CardHeader>
             {overviewDraft === null
               ? (
-                <div className="px-4 py-3 text-xs">
+                <CardContent className="text-xs">
                   {readOverview
                     ? <div className="leading-[1.6] text-muted-foreground [&_img]:my-1.5 [&_img]:max-w-full [&_img]:rounded-lg [&_ul]:my-2 [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:pl-5" dangerouslySetInnerHTML={{ __html: readOverview }} />
                     : <p className="text-muted-foreground">No overview was added to this order yet.</p>}
-                </div>
+                </CardContent>
               )
               : (
                 <OverviewEditor
@@ -282,34 +362,35 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                   )}
                 />
               )}
-          </section>
-        )}
-        {activeTab === 'projects' && (
-          <section className="overflow-hidden rounded-[15px] border bg-card">
-            <header className="flex min-h-[80px] items-center justify-between gap-5 border-b px-4 py-3.5">
-                <div><span className="mb-0.5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">{order.projects.length} items</span><h2 className="font-heading text-[17px] tracking-[-0.02em]">Line Up</h2></div>
-                <div className="flex items-center gap-2.5">
-                  {isAdmin && !needsTemplatePick && <>
-                  <Select value={templateName} onValueChange={(v) => switchTemplate(v ?? '')} disabled={order.projects.length > 0}>
-                    <SelectTrigger aria-label='Line Up template' title={order.projects.length > 0 ? 'Template is locked once items exist' : undefined}>
-                      <SelectValue placeholder="Template" />
+          </Card>
+        </TabsContent>
+        <TabsContent value="projects">
+          <Card className="mb-0">
+            <CardHeader className="border-b">
+              <div><CardDescription className="mb-0.5 text-[11px] font-extrabold uppercase tracking-[0.14em]">{order.projects.length} items</CardDescription><CardTitle className="text-[17px] tracking-[-0.02em]">Line Up</CardTitle></div>
+             <CardAction className="flex flex-wrap items-center gap-2">
+                {isAdmin && !needsTemplatePick && <>
+                  <Select value={templateName} onValueChange={(v) => { if (v === '__save_template__') { saveAsTemplate(); } else { switchTemplate(v ?? ''); } }}>
+                    <SelectTrigger aria-label='Line Up template' className={cn(deviated && 'border-amber-400 text-amber-800', order.projects.length > 0 && 'opacity-60')} title={order.projects.length > 0 ? 'Template locked once items exist — Save template… still available' : deviated ? 'Columns differ from this template — Save as template to keep them' : undefined}>
+                      <SelectValue>{templateName}{deviated ? ' (modified)' : ''}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.keys(props.lineUpTemplates).map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+                      {Object.keys(props.lineUpTemplates).map((name) => <SelectItem key={name} value={name} disabled={order.projects.length > 0} title={order.projects.length > 0 ? 'Template is locked once items exist' : undefined}>{name}</SelectItem>)}
+                      <SelectSeparator />
+                      <SelectItem value="__save_template__" >Save template…</SelectItem>
                     </SelectContent>
                   </Select>
-                  <button type='button' className="inline-flex min-h-[34px] items-center rounded-lg border bg-card px-2.5 text-xs font-bold" onClick={saveAsTemplate}>Save as template</button>
                   {(lineUpDraft !== null || busySaving) && <>
-                    <button type='button' className="inline-flex min-h-[34px] items-center rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground disabled:opacity-60" onClick={() => { if (saveTimer.current !== null) { window.clearTimeout(saveTimer.current); saveTimer.current = null; } saveLineUp(); }} disabled={busySaving}>{busySaving ? 'Saving…' : 'Save table'}</button>
+                    <Button type='button' onClick={() => { if (saveTimer.current !== null) { window.clearTimeout(saveTimer.current); saveTimer.current = null; } saveLineUp(); }} disabled={busySaving}>{busySaving ? 'Saving…' : 'Save table'}</Button>
                     {!busySaving && <Button type='button' variant="outline" onClick={discardLineUp}>Discard</Button>}
                   </>}
                   <Button type='button' onClick={() => props.openAddProject(lineUpCols)}><IconPlus size={14} /> Add item</Button>
                 </>}
-              </div>
-            </header>
+              </CardAction>
+            </CardHeader>
             {needsTemplatePick
               ? (
-                <div className="p-4 text-xs">
+                <CardContent className="text-xs">
                   {isAdmin ? (
                     <>
                       <p className="mb-3 text-muted-foreground">This order has no Line Up template yet. Pick one to start the roster — it can be changed until the first item is added.</p>
@@ -325,7 +406,7 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                   ) : (
                     <p className="text-muted-foreground">No Line Up items yet.</p>
                   )}
-                </div>
+                </CardContent>
               )
               : (
                 <div className="overflow-auto">
@@ -336,17 +417,17 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                           <TableHead key={col} className="whitespace-nowrap uppercase tracking-wider text-xs">
                             <span className="inline-flex items-center gap-1">
                               {col}
-                              {isAdmin && i > 0 && order.lineUpColumns.includes(col) && (
-                                <button type='button' className="grid size-4 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-red-600" aria-label={`Remove column ${col}`} onClick={() => removeLineUpColumn(col)}><IconX size={11} /></button>
+                              {isAdmin && i > 0 && (
+                                <Button type='button' variant="ghost" size="icon" className="size-4 rounded-full text-muted-foreground hover:bg-muted hover:text-red-600" aria-label={`Remove column ${col}`} onClick={() => removeLineUpColumn(col)}><IconX size={11} /></Button>
                               )}
                             </span>
                           </TableHead>
                         ))}
-                        {isAdmin && <TableHead><button type='button' className="inline-flex items-center gap-1 rounded-md border border-dashed border-muted-foreground/40 px-2 py-1 text-[11px] font-bold uppercase tracking-normal text-muted-foreground hover:border-primary hover:text-primary" onClick={addLineUpColumn}><IconPlus size={12} /> column</button></TableHead>}
+                        {isAdmin && <TableHead><Button type='button' variant="outline" size="sm" className="inline-flex gap-1 rounded-md border-dashed px-2 py-1 text-[11px] font-bold uppercase tracking-normal text-muted-foreground hover:border-primary hover:text-primary" onClick={addLineUpColumn}><IconPlus size={12} /> column</Button></TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {props.projects.map((item, idx) => (
+                      {props.lineUpItems.map((item, idx) => (
                         <TableRow
                           key={item.id}
                           className={cn(
@@ -356,7 +437,7 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                           onDragOver={(e) => { e.preventDefault(); setDropIndex(idx); }}
                           onDrop={(e) => {
                             e.preventDefault();
-                            if (dragIndex !== null && dragIndex !== idx) moveLineUpItem(props.projects[dragIndex], idx);
+                            if (dragIndex !== null && dragIndex !== idx) moveLineUpItem(props.lineUpItems[dragIndex], idx);
                             clearDrag();
                           }}
                         >
@@ -364,11 +445,11 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                             <TableCell key={col}>
                               {i === 0
                                 ? isAdmin
-                                  ? <Input className={cn(lineUpCell, 'min-w-[130px] font-bold')} value={nameValue(item)} onChange={(e) => editName(item.id, e.target.value)} aria-label={`${col} of ${item.name}`} />
+                                  ? <Input className="w-full min-w-[130px] font-bold" value={nameValue(item)} onChange={(e) => editName(item.id, e.target.value)} aria-label={`${col} of ${item.name}`} />
                                   : <strong className="text-[13px] font-bold">{item.name}</strong>
                                 : isAdmin
                                   ? <Input
-                                      className={lineUpCell}
+                                      className="w-full min-w-[90px]"
                                       value={cellValue(item, col)}
                                       onChange={(e) => editCell(item.id, col, e.target.value)}
                                       placeholder='—'
@@ -377,12 +458,12 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                                   : <span className="text-[13px]">{cellValue(item, col) || '—'}</span>}
                             </TableCell>
                           ))}
-                          {isAdmin && <TableCell className="w-[1%] whitespace-nowrap" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== idx) moveLineUpItem(props.projects[dragIndex], idx); clearDrag(); }}>
+                          {isAdmin && <TableCell className="w-[1%] whitespace-nowrap" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== idx) moveLineUpItem(props.lineUpItems[dragIndex], idx); clearDrag(); }}>
                             <div className="flex items-center justify-end gap-1">
-                              <span className={cn('grid size-[30px] cursor-grab place-items-center rounded-lg text-muted-foreground hover:bg-muted', dragIndex === idx && 'opacity-35')} draggable title='Drag to reorder' aria-label='Drag to reorder' onDragStart={() => setDragIndex(props.projects.findIndex((p) => p.id === item.id))} onDragEnd={clearDrag}><IconGripVertical size={15} /></span>
-                              <button type='button' className={rowActionBtn} onClick={() => moveLineUpItem(item, Math.max(0, idx - 1))} disabled={idx === 0} aria-label='Move up' title='Move up'><IconArrowDown size={14} style={{ rotate: '180deg' }} /></button>
-                              <button type='button' className={rowActionBtn} onClick={() => moveLineUpItem(item, Math.min(props.projects.length - 1, idx + 1))} disabled={idx === props.projects.length - 1} aria-label='Move down' title='Move down'><IconArrowDown size={14} /></button>
-                              <button type='button' className={cn(rowActionBtn, 'hover:bg-red-50 hover:text-red-600')} onClick={() => removeLineUpItem(item)} aria-label='Remove item' title='Remove item'><IconTrash size={14} /></button>
+                              <span className={cn('grid size-[30px] cursor-grab place-items-center rounded-lg text-muted-foreground hover:bg-muted', dragIndex === idx && 'opacity-35')} draggable title='Drag to reorder' aria-label='Drag to reorder' onDragStart={() => setDragIndex(props.lineUpItems.findIndex((p) => p.id === item.id))} onDragEnd={clearDrag}><IconGripVertical size={15} /></span>
+                              <Button type='button' variant="outline" size="icon" className={rowActionBtn} onClick={() => moveLineUpItem(item, Math.max(0, idx - 1))} disabled={idx === 0} aria-label='Move up' title='Move up'><IconArrowDown size={14} style={{ rotate: '180deg' }} /></Button>
+                              <Button type='button' variant="outline" size="icon" className={rowActionBtn} onClick={() => moveLineUpItem(item, Math.min(props.lineUpItems.length - 1, idx + 1))} disabled={idx === props.lineUpItems.length - 1} aria-label='Move down' title='Move down'><IconArrowDown size={14} /></Button>
+                              <Button type='button' variant="outline" size="icon" className={cn(rowActionBtn, 'hover:bg-red-50 hover:text-red-600')} onClick={() => removeLineUpItem(item)} aria-label='Remove item' title='Remove item'><IconTrash size={14} /></Button>
                             </div>
                           </TableCell>}
                         </TableRow>
@@ -396,10 +477,10 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                   </Table>
                 </div>
               )}
-          </section>
-        )}
-        {activeTab === 'discussion' && (
-          <section className="overflow-hidden rounded-[15px] border bg-card">
+          </Card>
+        </TabsContent>
+        <TabsContent value="discussion">
+          <Card className="mb-0">
             <div className="p-4">
               <OverviewEditor key={composerKey} initialHtml='' onChange={setComposerDraft} boxed header={(toolbar) => (
                 <div className="flex items-center justify-between gap-2 pb-2">
@@ -421,7 +502,7 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                         <div className="flex items-baseline gap-2">
                           <strong className="text-[13px] font-bold">{c.author}</strong>
                           <span className="text-xs text-muted-foreground">{formatCommentTime(c.createdAt)}</span>
-                          {isAdmin && <button type='button' className="ml-auto grid size-6 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 focus-visible:opacity-100" onClick={() => deleteComment(c.id)} aria-label='Delete comment' title='Delete comment'><IconTrash size={13} /></button>}
+                          {isAdmin && <Button type='button' variant="ghost" size="icon" className="ml-auto size-6 rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 focus-visible:opacity-100" onClick={() => deleteComment(c.id)} aria-label='Delete comment' title='Delete comment'><IconTrash size={13} /></Button>}
                         </div>
                         {readComments[c.id]
                           ? <div className="mt-1 text-[13px] leading-[1.55] text-foreground [&_img]:my-1.5 [&_img]:max-w-full [&_img]:rounded-lg [&_p]:first:mt-0 [&_p]:last:mb-0" dangerouslySetInnerHTML={{ __html: readComments[c.id] }} />
@@ -430,39 +511,44 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                     </div>
                   ))}
                 </div>}
-          </section>
-        )}
-        {activeTab === 'activity' && (
-          <section className="overflow-hidden rounded-[15px] border bg-card">
-            <header className="flex min-h-[67px] items-center border-b px-4 py-3">
-              <div><span className="mb-0.5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Activity</span><h2 className="font-heading text-[17px] tracking-[-0.02em]">What happened</h2></div>
-            </header>
-            <p className="px-4 py-3 text-xs text-muted-foreground">No activity recorded yet. Stage advances, assignments, and releases will appear here.</p>
-          </section>
-        )}
+          </Card>
+        </TabsContent>
+        <TabsContent value="designs">
+          <DesignsTab order={order as unknown as DemoOrder} user={props.user} isOwner={isAdmin} updateOrder={props.updateOrder} />
+        </TabsContent>
+        <TabsContent value="activity">
+          <Card className="mb-0">
+            <CardHeader className="border-b">
+              <div><CardDescription className="mb-0.5 text-[11px] font-extrabold uppercase tracking-[0.14em]">Activity</CardDescription><CardTitle className="text-[17px] tracking-[-0.02em]">What happened</CardTitle></div>
+            </CardHeader>
+            <CardContent className="text-xs"><p className="text-muted-foreground">No activity recorded yet. Stage advances, assignments, and releases will appear here.</p></CardContent>
+          </Card>
+        </TabsContent>
         <aside className="grid content-start gap-3">
-          <section className="overflow-hidden rounded-[15px] border bg-card p-4">
-            <div className="flex items-center justify-between gap-2">
+          <Card className="mb-0">
+            <CardHeader>
               <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Job brief</span>
-              {isAdmin && (briefDraft === null
-                ? <button type='button' className="inline-flex items-center gap-1 bg-transparent p-0 text-xs font-bold text-primary" onClick={() => setBriefDraft({ customer: order.customer, contact: order.contact, category: order.category, orderType: order.orderType, dueDate: order.dueDate, priority: order.priority, assignedArtistId: order.assignedArtistId })}><IconPencil size={13} /> Edit</button>
-                : null)}
-            </div>
+              <CardAction>
+                {isAdmin && (briefDraft === null
+                  ? <Button type='button' variant="ghost" size="sm" className="gap-1 px-2 text-xs font-bold text-primary hover:text-primary" onClick={() => setBriefDraft({ customer: order.customer, contact: order.contact, category: order.category, orderType: order.orderType, dueDate: order.dueDate, priority: order.priority, assignedArtistId: order.assignedArtistId })}><IconPencil size={13} /> Edit</Button>
+                  : null)}
+              </CardAction>
+            </CardHeader>
             {briefDraft === null
               ? (
-                <dl className="mt-1.5">
+                <CardContent>
                   {[['Customer', order.customer], ['Contact', order.contact || '—'], ['Category', order.category], ['Order type', order.orderType], ['Assigned artist', users.find((u) => u.id === order.assignedArtistId)?.name ?? '—'], ['Created', formatDate(order.createdAt.slice(0, 10))], ['Promise date', formatDate(order.dueDate)], ['Priority', order.priority]].map(([dt, dd]) => (
                     <div key={dt} className="grid gap-0.5 border-b py-2.5 last:border-b-0">
                       <dt className="text-xs text-muted-foreground">{dt}</dt>
                       <dd className="text-xs font-bold text-foreground">{dd}</dd>
                     </div>
                   ))}
-                </dl>
+                </CardContent>
               )
               : (
-                <div className="mt-3 grid gap-2.5">
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Customer<input className={smallInput} required value={briefDraft.customer ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, customer: e.target.value })} /></label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Contact<input className={smallInput} value={briefDraft.contact ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, contact: e.target.value })} /></label>
+                <CardContent className="grid gap-2.5">
+                  <label className="grid gap-1 text-xs font-bold text-foreground">Customer<Input required value={briefDraft.customer ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, customer: e.target.value })} /></label>
+                  <label className="grid gap-1 text-xs font-bold text-foreground">Contact<Input value={briefDraft.contact ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, contact: e.target.value })} /></label>
                   <label className="grid gap-1 text-xs font-bold text-foreground">Category
                     <Select value={briefDraft.category ?? ''} onValueChange={(v) => { const cat = v ?? ''; setBriefDraft({ ...briefDraft, category: cat, orderType: (props.orderTypes[cat] ?? [])[0] ?? '' }); }}>
                       <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -480,17 +566,17 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                     </Select>
                   </label>
                   <label className="grid gap-1 text-xs font-bold text-foreground">Assigned artist
-                    <Select value={briefDraft.assignedArtistId ?? ''} onValueChange={(v) => setBriefDraft({ ...briefDraft, assignedArtistId: v ?? '' })}>
+                    <Select value={briefDraft.assignedArtistId || '__unassigned__'} onValueChange={(v) => setBriefDraft({ ...briefDraft, assignedArtistId: v === '__unassigned__' ? '' : v })}>
                       <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— Unassigned</SelectItem>
+                        <SelectItem value="__unassigned__">— Unassigned</SelectItem>
                         {users.filter((u) => u.role === 'artist').map((artist) => (
                           <SelectItem key={artist.id} value={artist.id}>{artist.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Promise date<input type='date' className={smallInput} value={briefDraft.dueDate ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, dueDate: e.target.value })} /></label>
+                  <label className="grid gap-1 text-xs font-bold text-foreground">Promise date<Input type="date" value={briefDraft.dueDate ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, dueDate: e.target.value })} /></label>
                   <label className="grid gap-1 text-xs font-bold text-foreground">Priority
                     <Select value={briefDraft.priority ?? 'Normal'} onValueChange={(v) => setBriefDraft({ ...briefDraft, priority: (v ?? 'Normal') as 'Normal' | 'Urgent' })}>
                       <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -503,11 +589,31 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                     <Button type='button' onClick={saveBrief}>Save</Button>
                     <Button type='button' variant="ghost" onClick={() => setBriefDraft(null)}>Cancel</Button>
                   </div>
-                </div>
+                </CardContent>
               )}
-          </section>
+          </Card>
         </aside>
       </div>
+      </Tabs>
+      <ConfirmActionDialog
+        open={pendingConfirmation !== null}
+        title={pendingConfirmation?.kind === 'discardOverview' ? 'Discard overview changes?' : pendingConfirmation?.kind === 'deleteComment' ? 'Delete comment?' : 'Remove Line Up item?'}
+        description={pendingConfirmation?.kind === 'discardOverview' ? 'Your unsaved overview changes will be lost.' : pendingConfirmation?.kind === 'deleteComment' ? `Delete the comment by ${pendingConfirmation.author}?` : pendingConfirmation?.kind === 'removeLineUpItem' ? `Remove "${pendingConfirmation.itemName}" from the Line Up?` : ''}
+        confirmLabel={pendingConfirmation?.kind === 'discardOverview' ? 'Discard changes' : pendingConfirmation?.kind === 'deleteComment' ? 'Delete comment' : 'Remove item'}
+        variant="destructive"
+        onOpenChange={(open) => { if (!open) setPendingConfirmation(null); }}
+        onConfirm={confirmPendingAction}
+      />
+      <TextPromptDialog
+        open={pendingTextPrompt !== null}
+        title={pendingTextPrompt?.kind === 'lineUpTemplate' ? 'Save Line Up template' : 'Add Line Up column'}
+        description={pendingTextPrompt?.kind === 'lineUpTemplate' ? 'Save the current columns as a reusable template.' : 'Add a column to this order’s Line Up.'}
+        label={pendingTextPrompt?.kind === 'lineUpTemplate' ? 'Template name' : 'Column name'}
+        defaultValue={pendingTextPrompt?.kind === 'lineUpTemplate' ? pendingTextPrompt.defaultValue : ''}
+        submitLabel={pendingTextPrompt?.kind === 'lineUpTemplate' ? 'Save template' : 'Add column'}
+        onOpenChange={(open) => { if (!open) setPendingTextPrompt(null); }}
+        onSubmit={submitTextPrompt}
+      />
     </div>
   );
 }

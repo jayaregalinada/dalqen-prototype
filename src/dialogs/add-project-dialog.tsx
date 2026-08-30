@@ -1,9 +1,9 @@
 import { IconArrowRight, IconPlus } from '@tabler/icons-react';
 import { useState, type FormEvent } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 
 type ItemDraft = { name: string; custom: Record<string, string> };
 
@@ -34,12 +34,18 @@ export function AddProjectDialog({
             <DialogTitle>Add an item</DialogTitle>
             <DialogDescription>Each field is a column in this order's Line Up.</DialogDescription>
           </DialogHeader>
-          <div className="mt-3 grid grid-cols-2 gap-3 max-[600px]:grid-cols-1">
-            <Label className="col-span-1">{firstCol}<Input required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Team Pro Kit" /></Label>
-            {columns.slice(1).map((col) => (
-              <Label key={col}>{col}<Input value={custom[col] ?? ''} onChange={(e) => setCustom((prev) => ({ ...prev, [col]: e.target.value }))} placeholder="—" /></Label>
+          <FieldGroup className="mt-3 grid grid-cols-2 gap-3 max-[600px]:grid-cols-1">
+            <Field>
+              <FieldLabel htmlFor="line-up-item-name">{firstCol}</FieldLabel>
+              <Input id="line-up-item-name" required autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Team Pro Kit" />
+            </Field>
+            {columns.slice(1).map((column, index) => (
+              <Field key={column}>
+                <FieldLabel htmlFor={`line-up-field-${index}`}>{column}</FieldLabel>
+                <Input id={`line-up-field-${index}`} value={custom[column] ?? ''} onChange={(event) => setCustom((prev) => ({ ...prev, [column]: event.target.value }))} placeholder="—" />
+              </Field>
             ))}
-          </div>
+          </FieldGroup>
           <DialogFooter className="mt-5">
             <Button type="button" variant="ghost" onClick={close}>Cancel</Button>
             <Button type="submit"><IconPlus size={16} /> Add item <IconArrowRight size={16} /></Button>

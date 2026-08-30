@@ -5,6 +5,7 @@ import { supabase, SUPABASE_URL } from './supabase-client';
 // Signed URLs (1h expiry) are generated for display only and never persisted.
 
 export const BUCKET = 'overview-images';
+export const DESIGN_BUCKET = 'order-designs';
 
 type SignedEntry = { url: string; expiresAt: number };
 const signedCache = new Map<string, SignedEntry>();
@@ -49,6 +50,38 @@ export async function resolveStorageImages(html: string): Promise<string> {
   for (const r of resolved) {
     if (r) out = out.split(`src="${r.path}"`).join(`src="${r.url}"`);
   }
+  return out;
+}
+
+/** Upload a design file to the private order-designs bucket. */
+export async function uploadDesignFile(file: File): Promise<string | null> {
+  if (!supabase) return null;
+  const ext = file.name.split('.').pop()?.toLowerCase()?.slice(0, 8) || file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+  const name = `${crypto.randomUUID()}.${ext.replace(/[^a-z0-9]/g, '') || 'png'}`;
+  const { error } = await supabase.storage.from(DESIGN_BUCKET).upload(name, file, { contentType: file.type || 'application/octet-stream' });
+  if (error) {
+    console.error('Design upload failed', error);
+    return null;
+  }
+  return `${DESIGN_BUCKET}/${name}`;
+}
+
+const designSignedCache = new Map<string, SignedEntry>();
+
+export async function resolveDesignUrls(paths: string[]): Promise<Record<string, string>> {
+  if (!supabase || paths.length === 0) return {};
+  const out: Record<string, string> = {};
+  await Promise.all([...new Set(paths)].map(async (path) => {
+    if (!path.startsWith(DESIGN_BUCKET + '/')) { out[path] = path; return; }
+    let entry = designSignedCache.get(path);
+    if (!entry || entry.expiresAt < Date.now() + 5 * 60_000) {
+      const { data, error } = await supabase!.storage.from(DESIGN_BUCKET).createSignedUrl(path.replace(`${DESIGN_BUCKET}/`, ''), 60 * 60);
+      if (error || !data) { console.error('Design signing failed', path, error); out[path] = path; return; }
+      entry = { url: data.signedUrl, expiresAt: Date.now() + 60 * 60_000 };
+      designSignedCache.set(path, entry);
+    }
+    out[path] = entry.url;
+  }));
   return out;
 }
 

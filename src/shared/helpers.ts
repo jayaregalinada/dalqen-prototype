@@ -10,17 +10,11 @@ export function formatDate(value: string) {
   if (key === tomorrow.toDateString()) return 'Tomorrow';
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(date);
 }
-export function projectTone(project: DemoProject) {
-  if (project.qcStatus === 'Issue') return 'danger';
-  if (project.stage === 'For Release' || project.stage === 'Completed') return 'success';
-  if (project.stage === 'Approval') return 'warning';
-  return 'info';
-}
 export function orderStatus(order: DemoOrder) {
-  if (order.projects.some((p) => p.qcStatus === 'Issue')) return 'QC issue';
-  if (order.projects.length > 0 && order.projects.every((p) => p.stage === 'Completed')) return 'Released';
-  if (order.projects.some((p) => p.stage === 'For Release')) return 'Ready for release';
-  if (order.projects.some((p) => p.stage === 'Approval')) return 'Waiting approval';
+  if (order.qcStatus === 'Issue') return 'QC issue';
+  if (order.stage === 'Completed') return 'Released';
+  if (order.stage === 'For Release') return 'Ready for release';
+  if (order.stage === 'Approval') return 'Waiting approval';
   return 'In production';
 }
 export function cx(...classes: Array<string | false | undefined>) {

@@ -1,23 +1,22 @@
+import { Button } from '@/components/ui/button';
+import { ButtonGroup } from '@/components/ui/button-group';
 import type { QueueMode } from '../shared/types';
-import { cn } from '@/lib/utils';
 
 export function QueueToggle({ mode, setMode }: { mode: QueueMode; setMode: (mode: QueueMode) => void }) {
   return (
-    <div className="inline-flex gap-0.5 rounded-xl bg-foreground/5 p-1" aria-label="Queue view">
-      {(['orders', 'projects', 'kanban'] as const).map((m) => (
-        <button
-          key={m}
+    <ButtonGroup aria-label="Queue view">
+      {(['orders', 'kanban'] as const).map((item) => (
+        <Button
+          key={item}
           type="button"
-          aria-pressed={mode === m}
-          onClick={() => setMode(m)}
-          className={cn(
-            'min-h-9 rounded-lg px-4 text-sm font-bold text-muted-foreground transition-colors',
-            mode === m && 'bg-background text-foreground shadow-sm',
-          )}
+          variant={mode === item ? 'secondary' : 'outline'}
+          size="sm"
+          aria-pressed={mode === item}
+          onClick={() => setMode(item)}
         >
-          {m[0].toUpperCase() + m.slice(1)}
-        </button>
+          {item[0].toUpperCase() + item.slice(1)}
+        </Button>
       ))}
-    </div>
+    </ButtonGroup>
   );
 }

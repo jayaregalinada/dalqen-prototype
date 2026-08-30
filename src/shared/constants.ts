@@ -17,4 +17,4 @@ export const users: User[] = [
   { id: "nina", name: "Nina Bautista", role: "qc", initials: "NB", dept: "QC" },
   { id: "carlos", name: "Carlos Vega", role: "qc", initials: "CV", dept: "QC" },
 ];
-export const stages = ["Layout", "Approval", "Working Doc", "Sizing", "Printing", "Heatpress", "Sewing", "QC", "For Release", "Completed"];
+export const stages = ["Layout", "Approval", "Document", "Sizing", "Printing", "Heatpress", "Sewing", "QC", "For Release", "Completed"];

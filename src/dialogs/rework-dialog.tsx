@@ -1,7 +1,7 @@
 import { IconAlertCircle } from '@tabler/icons-react';
 import { useState, type FormEvent } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ export function ReworkDialog({
   close: () => void;
   confirm: (targetStage: string, reason: string) => void;
 }) {
-  const stages = ['Layout', 'Approval', 'Working Doc', 'Sizing', 'Printing', 'Heatpress', 'Sewing', 'QC', 'For Release', 'Completed'];
+  const stages = ['Layout', 'Approval', 'Document', 'Sizing', 'Printing', 'Heatpress', 'Sewing', 'QC', 'For Release', 'Completed'];
   const currentIdx = stages.indexOf(currentStage);
   const previousStages = stages.slice(0, currentIdx);
 
@@ -33,24 +33,26 @@ export function ReworkDialog({
         <form onSubmit={submit}>
           <DialogHeader>
             <span className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Record exception</span>
-            <DialogTitle>Send project back for rework</DialogTitle>
+            <DialogTitle>Send order back for rework</DialogTitle>
           </DialogHeader>
-          <div className="mt-2 grid gap-3">
-            <Label>Return to stage
-              <Select value={targetStage} onValueChange={(v) => setTargetStage(v ?? '')}>
-                <SelectTrigger className="mt-1.5 w-full"><SelectValue /></SelectTrigger>
+          <FieldGroup className="mt-2 gap-3">
+            <Field>
+              <FieldLabel htmlFor="rework-stage">Return to stage</FieldLabel>
+              <Select value={targetStage} onValueChange={setTargetStage}>
+                <SelectTrigger id="rework-stage" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {previousStages.map((stage) => (
                     <SelectItem key={stage} value={stage}>{stage}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </Label>
-            <Label>Reason
-              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="mt-1.5" />
-            </Label>
-          </div>
-          <DialogDescription className="mt-3 flex items-center gap-2"><IconAlertCircle size={16} aria-hidden /> The assigned department and project followers will be notified.</DialogDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="rework-reason">Reason</FieldLabel>
+              <Textarea id="rework-reason" value={reason} onChange={(event) => setReason(event.target.value)} rows={3} />
+            </Field>
+          </FieldGroup>
+          <DialogDescription className="mt-3 flex items-center gap-2"><IconAlertCircle size={16} aria-hidden /> The order will move back to this stage and the assigned artist will be notified.</DialogDescription>
           <DialogFooter className="mt-5">
             <Button type="button" variant="ghost" onClick={close}>Keep current stage</Button>
             <Button type="submit" variant="destructive">Send to {targetStage}</Button>
