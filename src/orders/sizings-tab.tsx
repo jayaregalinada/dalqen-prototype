@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconUpload, IconCheck, IconX, IconPhoto, IconFile, IconEye, IconDownload, IconZoomIn, IconZoomOut, IconLayoutGrid, IconList, IconTrash } from '@tabler/icons-react';
+import JSZip from 'jszip';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -45,6 +46,8 @@ export function SizingsTab({ order, user, isOwner, updateOrder }: Props) {
     try { return localStorage.getItem('dalqen-sizings-view') === 'grid' ? 'grid' : 'list'; } catch { return 'list'; }
   });
   const [deleteTarget, setDeleteTarget] = useState<DemoSizeFile | null>(null);
+  const [zipping, setZipping] = useState(false);
+  const [zipError, setZipError] = useState('');
 
   useEffect(() => {
     const paths = (order.sizings ?? []).map((d) => d.url).filter((u) => u.startsWith(DESIGN_BUCKET + '/'));
@@ -192,6 +195,54 @@ export function SizingsTab({ order, user, isOwner, updateOrder }: Props) {
       window.open(url, '_blank', 'noopener');
     }
   };
+  // Download the whole sizing set as one zip. Client-side (throwaway prototype):
+  // fetch each file, buffer in JSZip, save. 150MB total guard keeps the tab alive.
+  const downloadAllZip = async () => {
+    if (zipping || sizings.length === 0) return;
+    setZipping(true);
+    setZipError('');
+    const MAX_TOTAL = 150 * 1024 * 1024;
+    try {
+      const zip = new JSZip();
+      const used = new Set<string>();
+      let total = 0;
+      const failed: string[] = [];
+      for (const s of sizings) {
+        const base = s.name.replace(/\.[^.]+$/, '');
+        const ext = s.name.includes('.') ? s.name.slice(s.name.lastIndexOf('.')) : '';
+        let name = s.name;
+        let n = 2;
+        while (used.has(name)) { name = `${base}-${n}${ext}`; n++; }
+        used.add(name);
+        try {
+          const res = await fetch(getDisplayUrl(s));
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          total += blob.size;
+          if (total > MAX_TOTAL) { failed.push(s.name); continue; }
+          zip.file(name, blob);
+        } catch {
+          failed.push(s.name);
+        }
+      }
+      if (Object.keys(zip.files).length === 0) throw new Error('no files downloaded');
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${order.ref}-sizings.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (failed.length > 0) setZipError(`${failed.length} file${failed.length === 1 ? '' : 's'} could not be downloaded: ${failed.join(', ')}`);
+    } catch (e) {
+      console.error('Zip download failed', e);
+      setZipError('Could not create the zip — try again or download files individually.');
+    } finally {
+      setZipping(false);
+    }
+  };
 
   const getDisplayUrl = (s: DemoSizeFile) => resolvedUrls[s.url] ?? s.url;
   const viewerName = (id: string) => users.find((u) => u.id === id)?.name ?? id;
@@ -272,6 +323,9 @@ export function SizingsTab({ order, user, isOwner, updateOrder }: Props) {
               </CardDescription>
             </div>
             <div className="flex items-center gap-1.5">
+              <Button type="button" variant="outline" size="sm" onClick={() => void downloadAllZip()} disabled={sizings.length === 0 || zipping} className="gap-1.5" title={sizings.length === 0 ? 'No sizing files to download' : undefined}>
+                <IconDownload size={14} /> {zipping ? 'Preparing zip…' : `Download all (${sizings.length})`}
+              </Button>
               <Button type="button" variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" onClick={() => { setViewMode('list'); try { localStorage.setItem('dalqen-sizings-view', 'list'); } catch { /* ignore */ } }} aria-label="List view" title="List view"><IconList size={16} /></Button>
               <Button type="button" variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="icon" onClick={() => { setViewMode('grid'); try { localStorage.setItem('dalqen-sizings-view', 'grid'); } catch { /* ignore */ } }} aria-label="Grid view" title="Grid view"><IconLayoutGrid size={16} /></Button>
             </div>
@@ -320,7 +374,7 @@ export function SizingsTab({ order, user, isOwner, updateOrder }: Props) {
               ))}
             </div>
           )}
-          {uploadError && !uploading && <p className="text-xs font-medium text-destructive" role="alert">{uploadError}</p>}
+          {zipError && !uploading && <p className="text-xs font-medium text-destructive" role="alert">{zipError}</p>}
           {sizings.length === 0 ? (
             canUpload ? null : (
               <div className="rounded-xl border border-dashed bg-muted/30 px-4 py-10 text-center">
