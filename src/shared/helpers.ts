@@ -13,7 +13,7 @@ export function formatDate(value: string) {
 export function orderStatus(order: DemoOrder) {
   if (order.qcStatus === 'Issue') return 'QC issue';
   if (order.stage === 'Completed') return 'Released';
-  if (order.stage === 'For Release') return 'Ready for release';
+  if (order.stage === 'Release') return 'Ready for release';
   if (order.stage === 'Approval') return 'Waiting approval';
   return 'In production';
 }

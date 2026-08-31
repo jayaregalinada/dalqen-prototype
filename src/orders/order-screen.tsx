@@ -145,11 +145,11 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   const isAssignedQc = props.user.role === 'qc' && (order.assignedQcIds ?? []).includes(props.user.id);
   const qcCanAdvance = isAssignedQc && props.stage === 'QC';
   const isAssignedRelease = props.user.role === 'release' && (order.assignedReleaseIds ?? []).includes(props.user.id);
-  const releaseCanAdvance = isAssignedRelease && props.stage === 'For Release';
+  const releaseCanAdvance = isAssignedRelease && props.stage === 'Release';
   const canAdvance = isAdmin || order.assignedArtistId === props.user.id || printerCanAdvance || sewerCanAdvance || qcCanAdvance || releaseCanAdvance;
   const canQc = isAdmin || props.user.role === 'qc';
   const atLastStage = props.stage === 'Completed' || props.stage === stages[stages.length - 1];
-  const releaseGate = props.stage === 'For Release' && props.qcStatus !== 'Passed';
+  const releaseGate = props.stage === 'Release' && props.qcStatus !== 'Passed';
   const designs = (order as unknown as { designs?: { length: number } })?.designs as unknown as DemoOrder['designs'] ?? [];
   const designState = orderDesignState(order);
   const needsDesignForApproval = props.stage === 'Layout' && designs.length === 0;
@@ -166,7 +166,7 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   const advanceBlockedBySewer = sewerMissing;
   const qcMissing = props.stage === 'QC' && (order.assignedQcIds?.length ?? 0) === 0;
   const advanceBlockedByQc = qcMissing;
-  const releaseMissing = props.stage === 'For Release' && (order.assignedReleaseIds?.length ?? 0) === 0;
+  const releaseMissing = props.stage === 'Release' && (order.assignedReleaseIds?.length ?? 0) === 0;
   const advanceBlockedByRelease = releaseMissing;
   const isRevised = props.stage === 'Approval' && designState === 'rejected';
 
@@ -331,9 +331,9 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
         {isRevised && <div className="px-3.5 pb-2"><Badge variant="destructive">Revised · v{designs.length}</Badge></div>}
         <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5">
           <div className="flex flex-wrap items-center gap-2.5">
-            {canAdvance && <Button type='button' onClick={props.advanceStage} disabled={atLastStage || releaseGate || advanceBlockedByDesign || advanceBlockedByApproval || advanceBlockedByLineUp || advanceBlockedBySizing || advanceBlockedByPrinter || advanceBlockedBySewer || advanceBlockedByQc || advanceBlockedByRelease} title={releaseGate ? 'QC must pass before release' : advanceBlockedByDesign ? 'Upload a design in Designs tab first' : advanceBlockedByApproval ? 'Approve at least one design first' : advanceBlockedByLineUp ? 'Add at least one Line Up item first' : advanceBlockedBySizing ? 'Upload sizing for every Line Up item first' : advanceBlockedByPrinter ? 'Assign a printing crew first' : advanceBlockedBySewer ? 'Assign a sewing crew first' : advanceBlockedByQc ? 'Assign a QC crew first' : advanceBlockedByRelease ? 'Assign a release crew first' : undefined}><IconArrowRight size={15} /> {props.stage === 'For Release' ? 'Release order' : 'Advance stage'}</Button>}
+            {canAdvance && <Button type='button' onClick={props.advanceStage} disabled={atLastStage || releaseGate || advanceBlockedByDesign || advanceBlockedByApproval || advanceBlockedByLineUp || advanceBlockedBySizing || advanceBlockedByPrinter || advanceBlockedBySewer || advanceBlockedByQc || advanceBlockedByRelease} title={releaseGate ? 'QC must pass before release' : advanceBlockedByDesign ? 'Upload a design in Designs tab first' : advanceBlockedByApproval ? 'Approve at least one design first' : advanceBlockedByLineUp ? 'Add at least one Line Up item first' : advanceBlockedBySizing ? 'Upload sizing for every Line Up item first' : advanceBlockedByPrinter ? 'Assign a printing crew first' : advanceBlockedBySewer ? 'Assign a sewing crew first' : advanceBlockedByQc ? 'Assign a QC crew first' : advanceBlockedByRelease ? 'Assign a release crew first' : undefined}><IconArrowRight size={15} /> {props.stage === 'Release' ? 'Release order' : 'Advance stage'}</Button>}
             {canQc && props.qcStatus !== 'Passed' && <Button type='button' variant="outline" onClick={props.passQc}><IconClipboardCheck size={15} /> Record QC pass</Button>}
-            {isAdmin && <Button type='button' variant="outline" onClick={props.openRework}><IconRefresh size={15} /> Send back</Button>}
+            {isAdmin && props.stage !== 'Completed' && <Button type='button' variant="outline" onClick={props.openRework}><IconRefresh size={15} /> Send back</Button>}
             {!canAdvance && <span className="text-xs text-muted-foreground">Current stage: <strong className="text-primary">{props.stage}</strong></span>}
           </div>
           {releaseGate && <small className="text-xs font-bold text-amber-700">QC must pass before this order can be released.</small>}

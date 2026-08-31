@@ -105,7 +105,7 @@ export function usePrototypeWorkspace(
       dueToday: visibleOrders.filter((o) => o.dueDate === today).length,
       waiting: visibleOrders.filter((o) => o.stage === 'Approval').length,
       qcIssues: visibleOrders.filter((o) => o.qcStatus === 'Issue').length,
-      ready: visibleOrders.filter((o) => o.stage === 'For Release').length,
+      ready: visibleOrders.filter((o) => o.stage === 'Release').length,
       activeOrders: visibleOrders.filter((o) => o.stage !== 'Completed').length,
       released: visibleOrders.filter((o) => o.stage === 'Completed').length,
     }),

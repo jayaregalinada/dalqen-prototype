@@ -5,7 +5,7 @@ import { Link } from '../ui/link';
 import { Status } from '../ui/status';
 import type { PrototypeProps } from '../shared/types';
 
-const activeStages = ['Layout', 'Approval', 'Document', 'Sizing', 'Printing', 'Heatpress', 'Sewing', 'QC', 'For Release'];
+const activeStages = ['Layout', 'Approval', 'Document', 'Sizing', 'Printing', 'Heatpress', 'Sewing', 'QC', 'Release'];
 
 export function KanbanBoard({ props }: { props: PrototypeProps }) {
   const orders = props.orderRows;

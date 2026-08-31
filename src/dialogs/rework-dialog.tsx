@@ -15,7 +15,7 @@ export function ReworkDialog({
   close: () => void;
   confirm: (targetStage: string, reason: string) => void;
 }) {
-  const stages = ['Layout', 'Approval', 'Document', 'Sizing', 'Printing', 'Heatpress', 'Sewing', 'QC', 'For Release', 'Completed'];
+  const stages = ['Layout', 'Approval', 'Document', 'Sizing', 'Printing', 'Heatpress', 'Sewing', 'QC', 'Release', 'Completed'];
   const currentIdx = stages.indexOf(currentStage);
   const previousStages = stages.slice(0, currentIdx);
 

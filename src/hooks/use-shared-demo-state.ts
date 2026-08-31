@@ -113,7 +113,7 @@ export const defaultDemoState: DemoState = {
 
 const allowedStages = new Set([
   'Layout', 'Approval', 'Document', 'Sizing', 'Printing',
-  'Heatpress', 'Sewing', 'QC', 'For Release', 'Completed',
+  'Heatpress', 'Sewing', 'QC', 'Release', 'Completed',
 ]);
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -269,7 +269,7 @@ function normalizeOrder(value: unknown): DemoOrder | null {
       // from the most-advanced legacy item so pre-migration orders keep their progress
       const rawStage = safeText(order.stage, 60);
       // pre-rename rows may still persist the legacy label; normalize it
-      const explicit = rawStage === 'Working Doc' ? 'Document' : rawStage;
+      const explicit = rawStage === 'Working Doc' ? 'Document' : rawStage === 'For Release' ? 'Release' : rawStage;
       if (allowedStages.has(explicit)) return explicit;
       const legacy = Array.isArray(order.projects)
         ? order.projects

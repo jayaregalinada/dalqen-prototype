@@ -13,7 +13,7 @@ export function DispatchDashboard({ props }: { props: PrototypeProps }) {
   if (props.orderRows.length === 0) {
     return <><ScreenTitle eyebrow="New workspace" title="Start your production desk." copy="Create the first job order to populate your dashboard and queues." /><EmptyWorkspace openNewOrder={props.openNewOrder} canCreateOrder={props.canCreateOrder} /></>;
   }
-  const flowStages = ['Layout', 'Approval', 'Printing', 'Heatpress', 'Sewing', 'QC', 'For Release'];
+  const flowStages = ['Layout', 'Approval', 'Printing', 'Heatpress', 'Sewing', 'QC', 'Release'];
   const stats = [
     { label: 'Overdue', value: props.stats.overdue, icon: IconAlertTriangle, tone: 'danger' },
     { label: 'Due today', value: props.stats.dueToday, icon: IconClock, tone: 'warning' },
@@ -85,7 +85,7 @@ export function DispatchDashboard({ props }: { props: PrototypeProps }) {
             <div><CardDescription>Release desk</CardDescription><CardTitle>{props.stats.ready === 0 ? 'Nothing waiting for release' : `${props.stats.ready} ready for release`}</CardTitle></div>
             <CardAction><Button asChild variant="outline" size="sm"><Link href={props.href('orders')}>Open orders <IconArrowRight aria-hidden /></Link></Button></CardAction>
           </CardHeader>
-          <CardContent><p className="text-muted-foreground">Orders appear here once they are in For Release and QC is passed.</p></CardContent>
+          <CardContent><p className="text-muted-foreground">Orders appear here once they are in Release and QC is passed.</p></CardContent>
         </Card>
       </div>
     </>
