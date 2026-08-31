@@ -39,7 +39,7 @@ export function usePrototypeWorkspace(
   const orderParam = params.get('order');
 
   const visibleOrders = sharedState.orders.filter(
-    (order) => user.role === 'owner' || order.assignedArtistId === user.id || (order.assignedPrinterIds ?? []).includes(user.id),
+    (order) => user.role === 'owner' || order.assignedArtistId === user.id || (order.assignedPrinterIds ?? []).includes(user.id) || (order.assignedSewerIds ?? []).includes(user.id),
   );
   const selectedOrder = !orderParam
     ? visibleOrders[0]
@@ -227,6 +227,7 @@ export function usePrototypeWorkspace(
         lineUpTemplateName: '',
         assignedArtistId: '',
         assignedPrinterIds: [],
+        assignedSewerIds: [],
         stage: 'Layout',
         qcStatus: 'Pending',
         designs: [],
