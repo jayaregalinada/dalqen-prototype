@@ -28,6 +28,14 @@ export type DemoDesign = {
   downloadedBy: string | null; // admin who last downloaded the file
   downloadedAt: string | null;
 };
+export type DemoSizeFile = {
+  id: string;
+  name: string;
+  url: string; // data URL or bucket path for preview
+  size: number; // file size in bytes (dedup guard)
+  uploadedBy: string;
+  createdAt: string;
+};
 
 export type OrderDesignState = 'none' | 'pending' | 'approved' | 'rejected';
 /** Derived order-level design state from per-design statuses — never stored. */
@@ -60,6 +68,7 @@ export type DemoOrder = {
   lineUpColumns: string[]; // per-order columns added on top of the chosen template
   removedLineUpColumns: string[]; // template columns the order deviates from (hidden for this order only)
   designs: DemoDesign[]; // versioned uploads for Approval gate
+  sizings: DemoSizeFile[]; // artist uploads for the Sizing stage (one file per Line Up item expected)
 };
 
 export type DemoState = {
@@ -83,7 +92,7 @@ export const defaultOrderTypes: Record<string, string[]> = {
   Custom: ['Custom item'],
 };
 
-export type NewOrderInput = Omit<DemoOrder, 'id' | 'ref' | 'createdAt' | 'projects' | 'lineUpColumns' | 'removedLineUpColumns' | 'lineUpTemplateName' | 'discussion' | 'assignedArtistId' | 'stage' | 'qcStatus' | 'designs'> & {
+export type NewOrderInput = Omit<DemoOrder, 'id' | 'ref' | 'createdAt' | 'projects' | 'lineUpColumns' | 'removedLineUpColumns' | 'lineUpTemplateName' | 'discussion' | 'assignedArtistId' | 'stage' | 'qcStatus' | 'designs' | 'sizings'> & {
   projects: Array<{ name: string; custom: Record<string, string> }>;
 };
 
@@ -184,6 +193,25 @@ function normalizeDesigns(value: unknown, legacy?: { status?: string; reason?: u
   }
   return designs;
 }
+function normalizeSizings(value: unknown): DemoSizeFile[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((d) => {
+      if (!d || typeof d !== 'object') return null;
+      const size = d as Partial<DemoSizeFile>;
+      const url = safeText(size.url, DESIGN_URL_MAX_CHARS);
+      if (!url) return null;
+      return {
+        id: safeText(size.id, 80) || crypto.randomUUID(),
+        name: safeText(size.name, 120) || 'sizing',
+        url,
+        size: Number.isFinite(size.size) ? Math.max(0, Math.floor(Number(size.size))) : 0,
+        uploadedBy: safeText(size.uploadedBy, 60) || 'unknown',
+        createdAt: safeText(size.createdAt, 40) || new Date().toISOString(),
+      };
+    })
+    .filter((d): d is DemoSizeFile => d !== null);
+}
 
 function normalizeDiscussion(value: unknown): DemoComment[] {
   if (!Array.isArray(value)) return [];
@@ -253,6 +281,7 @@ function normalizeOrder(value: unknown): DemoOrder | null {
         reason: (order as unknown as { designRejectionReason?: unknown }).designRejectionReason,
       },
     ),
+    sizings: normalizeSizings((order as unknown as { sizings?: unknown }).sizings),
   };
 }
 

@@ -228,6 +228,7 @@ export function usePrototypeWorkspace(
         stage: 'Layout',
         qcStatus: 'Pending',
         designs: [],
+        sizings: [],
         projects: input.projects.map((project) => ({
           id: crypto.randomUUID(),
           name: project.name,

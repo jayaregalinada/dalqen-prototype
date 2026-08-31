@@ -1,4 +1,4 @@
-import { IconActivity, IconArrowDown, IconArrowLeft, IconArrowRight, IconStack2, IconFileText, IconGripVertical, IconMessages, IconDots, IconPencil, IconPlus, IconRefresh, IconClipboardCheck, IconTrash, IconX, IconPhoto , IconAlertTriangle} from '@tabler/icons-react';
+import { IconActivity, IconArrowDown, IconArrowLeft, IconArrowRight, IconStack2, IconFileText, IconGripVertical, IconMessages, IconDots, IconPencil, IconPlus, IconRefresh, IconClipboardCheck, IconTrash, IconX, IconPhoto, IconAlertTriangle, IconRuler2 } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { cx, formatDate, orderStatus } from '../shared/helpers';
 import { cn } from '@/lib/utils';
@@ -22,9 +22,10 @@ import { Button } from '@/components/ui/button';
 import { ConfirmActionDialog } from '../ui/confirm-action-dialog';
 import { TextPromptDialog } from '../ui/text-prompt-dialog';
 import { DesignsTab } from './designs-tab';
+import { SizingsTab } from './sizings-tab';
 import { Badge } from '@/components/ui/badge';
 
-const tabs = ['overview', 'projects', 'discussion', 'designs', 'activity'] as const;
+const tabs = ['overview', 'projects', 'discussion', 'designs', 'sizings', 'activity'] as const;
 type Tab = (typeof tabs)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -32,6 +33,7 @@ const TAB_LABELS: Record<Tab, string> = {
   projects: 'Line Up',
   discussion: 'Discussion',
   designs: 'Designs',
+  sizings: 'Sizing',
   activity: 'Activity',
 };
 
@@ -144,6 +146,9 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   const advanceBlockedByApproval = props.stage === 'Approval' && designState !== 'approved';
   const advanceBlockedByLineUp = props.stage === 'Document' && props.lineUpItems.length === 0;
   const warnLineUp = props.stage === 'Document' && order.projects.length === 0;
+  const sizingCount = order.sizings?.length ?? 0;
+  const advanceBlockedBySizing = props.stage === 'Sizing' && sizingCount < props.lineUpItems.length;
+  const warnSizing = props.stage === 'Sizing' && sizingCount < order.projects.length;
   const isRevised = props.stage === 'Approval' && designState === 'rejected';
 
   const formatCommentTime = (iso: string) => {
@@ -303,7 +308,7 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
         {isRevised && <div className="px-3.5 pb-2"><Badge variant="destructive">Revised · v{designs.length}</Badge></div>}
         <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5">
           <div className="flex flex-wrap items-center gap-2.5">
-            {canAdvance && <Button type='button' onClick={props.advanceStage} disabled={atLastStage || releaseGate || advanceBlockedByDesign|| advanceBlockedByApproval || advanceBlockedByLineUp} title={releaseGate ? 'QC must pass before release' : advanceBlockedByDesign ? 'Upload a design in Designs tab first' : advanceBlockedByApproval ? 'Approve at least one design first' : advanceBlockedByLineUp ? 'Add at least one Line Up item first' : undefined}><IconArrowRight size={15} /> {props.stage === 'For Release' ? 'Release order' : 'Advance stage'}</Button>}
+            {canAdvance && <Button type='button' onClick={props.advanceStage} disabled={atLastStage || releaseGate || advanceBlockedByDesign || advanceBlockedByApproval || advanceBlockedByLineUp || advanceBlockedBySizing} title={releaseGate ? 'QC must pass before release' : advanceBlockedByDesign ? 'Upload a design in Designs tab first' : advanceBlockedByApproval ? 'Approve at least one design first' : advanceBlockedByLineUp ? 'Add at least one Line Up item first' : advanceBlockedBySizing ? 'Upload sizing for every Line Up item first' : undefined}><IconArrowRight size={15} /> {props.stage === 'For Release' ? 'Release order' : 'Advance stage'}</Button>}
             {canQc && props.qcStatus !== 'Passed' && <Button type='button' variant="outline" onClick={props.passQc}><IconClipboardCheck size={15} /> Record QC pass</Button>}
             {isAdmin && <Button type='button' variant="outline" onClick={props.openRework}><IconRefresh size={15} /> Send back</Button>}
             {!canAdvance && <span className="text-xs text-muted-foreground">Current stage: <strong className="text-primary">{props.stage}</strong></span>}
@@ -314,14 +319,18 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
         <TabsList className="w-full justify-start">
           {tabs.map((tab) => (
-            <TabsTrigger key={tab} value={tab} className="flex h-[38px] items-center gap-2 px-3.5 text-[13px] font-bold text-muted-foreground" title={tab === 'projects' && warnLineUp ? 'Line Up is empty — add items before advancing' : undefined}>              {tab === 'overview' && <IconFileText size={16} />}
+            <TabsTrigger key={tab} value={tab} className="flex h-[38px] items-center gap-2 px-3.5 text-[13px] font-bold text-muted-foreground" title={tab === 'projects' && warnLineUp ? 'Line Up is empty — add items before advancing' : tab === 'sizings' && warnSizing ? 'Sizing incomplete — upload sizing for every Line Up item before advancing' : undefined}>
+              {tab === 'overview' && <IconFileText size={16} />}
               {tab === 'projects' && <IconStack2 size={16} />}
               {tab === 'discussion' && <IconMessages size={16} />}
               {tab === 'designs' && <IconPhoto size={16} />}
+              {tab === 'sizings' && <IconRuler2 size={16} />}
               {tab === 'activity' && <IconActivity size={16} />}
               <span className="capitalize">{TAB_LABELS[tab]}</span>
               {tab === 'projects' && warnLineUp && <IconAlertTriangle size={15} className="text-amber-500" aria-label="Line Up is empty" />}
               {tab === 'projects' && <span className={cn('inline-grid min-w-[19px] place-items-center rounded-md px-1 text-xs font-bold', warnLineUp ? 'bg-amber-100 text-amber-700' : 'bg-muted')}>{order.projects.length}</span>}
+              {tab === 'sizings' && warnSizing && <IconAlertTriangle size={15} className="text-amber-500" aria-label="Sizing incomplete" />}
+              {tab === 'sizings' && <span className={cn('inline-grid min-w-[19px] place-items-center rounded-md px-1 text-xs font-bold', warnSizing ? 'bg-amber-100 text-amber-700' : 'bg-muted')}>{sizingCount}</span>}
               {tab === 'discussion' && <span className="inline-grid min-w-[19px] place-items-center rounded-md bg-muted px-1 text-xs font-bold">{order.discussion.length}</span>}
               {tab === 'designs' && <span className="inline-grid min-w-[19px] place-items-center rounded-md bg-muted px-1 text-xs font-bold">{designs.length}</span>}
             </TabsTrigger>
@@ -515,6 +524,9 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
         </TabsContent>
         <TabsContent value="designs">
           <DesignsTab order={order as unknown as DemoOrder} user={props.user} isOwner={isAdmin} updateOrder={props.updateOrder} />
+        </TabsContent>
+        <TabsContent value="sizings">
+          <SizingsTab order={order as unknown as DemoOrder} user={props.user} isOwner={isAdmin} updateOrder={props.updateOrder} />
         </TabsContent>
         <TabsContent value="activity">
           <Card className="mb-0">

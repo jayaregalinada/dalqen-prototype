@@ -8,8 +8,8 @@ export const roleDefs: Array<{ key: Role; label: string; stages: string[] }> = [
 ];
 export const users: User[] = [
   { id: "owner", name: "Workspace Owner", role: "owner", initials: "WO", dept: null },
-  { id: "jamie", name: "Jamie Reyes", role: "artist", initials: "JR", dept: "Layout" },
-  { id: "maya", name: "Maya Santos", role: "artist", initials: "MS", dept: "Layout" },
+  { id: "jamie", name: "Jamie Reyes", role: "artist", initials: "JR", dept: "Layout & Sizing" },
+  { id: "maya", name: "Maya Santos", role: "artist", initials: "MS", dept: "Layout & Sizing" },
   { id: "elena", name: "Elena Cruz", role: "sewer", initials: "EC", dept: "Sewing" },
   { id: "marco", name: "Marco Diaz", role: "sewer", initials: "MD", dept: "Sewing" },
   { id: "rosa", name: "Rosa Lim", role: "heatpress", initials: "RL", dept: "Heatpress" },
