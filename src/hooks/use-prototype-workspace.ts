@@ -31,14 +31,15 @@ export function usePrototypeWorkspace(
   const canCreateOrder = user.role === 'owner';
   const roleDef = roleDefs.find((r) => r.key === user.role)!;
 
-  // Owner sees every order; the rest only see orders where they're the assigned artist.
-  // The selected order comes from the URL (?order=JO-0001). A param naming an unknown or
-  // not-visible order "denies" the screen; a missing param keeps the newest visible order.
+  // Owner sees every order; the rest only see orders where they're the assigned artist
+  // or the assigned printing crew. The selected order comes from the URL (?order=JO-0001).
+  // A param naming an unknown or not-visible order "denies" the screen; a missing param
+  // keeps the newest visible order.
   const params = new URLSearchParams(nav.search);
   const orderParam = params.get('order');
 
   const visibleOrders = sharedState.orders.filter(
-    (order) => user.role === 'owner' || order.assignedArtistId === user.id,
+    (order) => user.role === 'owner' || order.assignedArtistId === user.id || order.assignedPrinterId === user.id,
   );
   const selectedOrder = !orderParam
     ? visibleOrders[0]
@@ -225,6 +226,7 @@ export function usePrototypeWorkspace(
         removedLineUpColumns: [],
         lineUpTemplateName: '',
         assignedArtistId: '',
+        assignedPrinterId: '',
         stage: 'Layout',
         qcStatus: 'Pending',
         designs: [],

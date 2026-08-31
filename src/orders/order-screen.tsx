@@ -149,6 +149,8 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   const sizingCount = order.sizings?.length ?? 0;
   const advanceBlockedBySizing = props.stage === 'Sizing' && sizingCount < props.lineUpItems.length;
   const warnSizing = props.stage === 'Sizing' && sizingCount < order.projects.length;
+  const printerMissing = props.stage === 'Printing' && !order.assignedPrinterId;
+  const advanceBlockedByPrinter = printerMissing;
   const isRevised = props.stage === 'Approval' && designState === 'rejected';
 
   const formatCommentTime = (iso: string) => {
@@ -308,12 +310,26 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
         {isRevised && <div className="px-3.5 pb-2"><Badge variant="destructive">Revised · v{designs.length}</Badge></div>}
         <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5">
           <div className="flex flex-wrap items-center gap-2.5">
-            {canAdvance && <Button type='button' onClick={props.advanceStage} disabled={atLastStage || releaseGate || advanceBlockedByDesign || advanceBlockedByApproval || advanceBlockedByLineUp || advanceBlockedBySizing} title={releaseGate ? 'QC must pass before release' : advanceBlockedByDesign ? 'Upload a design in Designs tab first' : advanceBlockedByApproval ? 'Approve at least one design first' : advanceBlockedByLineUp ? 'Add at least one Line Up item first' : advanceBlockedBySizing ? 'Upload sizing for every Line Up item first' : undefined}><IconArrowRight size={15} /> {props.stage === 'For Release' ? 'Release order' : 'Advance stage'}</Button>}
+            {canAdvance && <Button type='button' onClick={props.advanceStage} disabled={atLastStage || releaseGate || advanceBlockedByDesign || advanceBlockedByApproval || advanceBlockedByLineUp || advanceBlockedBySizing || advanceBlockedByPrinter} title={releaseGate ? 'QC must pass before release' : advanceBlockedByDesign ? 'Upload a design in Designs tab first' : advanceBlockedByApproval ? 'Approve at least one design first' : advanceBlockedByLineUp ? 'Add at least one Line Up item first' : advanceBlockedBySizing ? 'Upload sizing for every Line Up item first' : advanceBlockedByPrinter ? 'Assign a printing crew first' : undefined}><IconArrowRight size={15} /> {props.stage === 'For Release' ? 'Release order' : 'Advance stage'}</Button>}
             {canQc && props.qcStatus !== 'Passed' && <Button type='button' variant="outline" onClick={props.passQc}><IconClipboardCheck size={15} /> Record QC pass</Button>}
             {isAdmin && <Button type='button' variant="outline" onClick={props.openRework}><IconRefresh size={15} /> Send back</Button>}
             {!canAdvance && <span className="text-xs text-muted-foreground">Current stage: <strong className="text-primary">{props.stage}</strong></span>}
+            {printerMissing && isAdmin && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-amber-700">Printing crew required:</span>
+                <Select value={order.assignedPrinterId || '__unassigned__'} onValueChange={(v) => props.updateOrder(order.id, { assignedPrinterId: v === '__unassigned__' ? '' : v })}>
+                  <SelectTrigger className="h-8 w-44"><SelectValue placeholder="Select printing crew" /></SelectTrigger>
+                  <SelectContent>
+                    {users.filter((u) => u.role === 'printer').map((printer) => (
+                      <SelectItem key={printer.id} value={printer.id}>{printer.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           {releaseGate && <small className="text-xs font-bold text-amber-700">QC must pass before this order can be released.</small>}
+          {printerMissing && <small className="text-xs font-bold text-amber-700">Awaiting printing crew assignment.</small>}
         </div>
       </section>
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
@@ -542,14 +558,14 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
               <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Job brief</span>
               <CardAction>
                 {isAdmin && (briefDraft === null
-                  ? <Button type='button' variant="ghost" size="sm" className="gap-1 px-2 text-xs font-bold text-primary hover:text-primary" onClick={() => setBriefDraft({ customer: order.customer, contact: order.contact, category: order.category, orderType: order.orderType, dueDate: order.dueDate, priority: order.priority, assignedArtistId: order.assignedArtistId })}><IconPencil size={13} /> Edit</Button>
+                  ? <Button type='button' variant="ghost" size="sm" className="gap-1 px-2 text-xs font-bold text-primary hover:text-primary" onClick={() => setBriefDraft({ customer: order.customer, contact: order.contact, category: order.category, orderType: order.orderType, dueDate: order.dueDate, priority: order.priority, assignedArtistId: order.assignedArtistId, assignedPrinterId: order.assignedPrinterId })}><IconPencil size={13} /> Edit</Button>
                   : null)}
               </CardAction>
             </CardHeader>
             {briefDraft === null
               ? (
                 <CardContent>
-                  {[['Customer', order.customer], ['Contact', order.contact || '—'], ['Category', order.category], ['Order type', order.orderType], ['Assigned artist', users.find((u) => u.id === order.assignedArtistId)?.name ?? '—'], ['Created', formatDate(order.createdAt.slice(0, 10))], ['Promise date', formatDate(order.dueDate)], ['Priority', order.priority]].map(([dt, dd]) => (
+                  {[['Customer', order.customer], ['Contact', order.contact || '—'], ['Category', order.category], ['Order type', order.orderType], ['Assigned artist', users.find((u) => u.id === order.assignedArtistId)?.name ?? '—'], ['Printing crew', users.find((u) => u.id === order.assignedPrinterId)?.name ?? '—'], ['Created', formatDate(order.createdAt.slice(0, 10))], ['Promise date', formatDate(order.dueDate)], ['Priority', order.priority]].map(([dt, dd]) => (
                     <div key={dt} className="grid gap-0.5 border-b py-2.5 last:border-b-0">
                       <dt className="text-xs text-muted-foreground">{dt}</dt>
                       <dd className="text-xs font-bold text-foreground">{dd}</dd>
@@ -584,6 +600,17 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                         <SelectItem value="__unassigned__">— Unassigned</SelectItem>
                         {users.filter((u) => u.role === 'artist').map((artist) => (
                           <SelectItem key={artist.id} value={artist.id}>{artist.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-foreground">Printing crew
+                    <Select value={briefDraft.assignedPrinterId || '__unassigned__'} onValueChange={(v) => setBriefDraft({ ...briefDraft, assignedPrinterId: v === '__unassigned__' ? '' : v })}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__unassigned__">— Unassigned</SelectItem>
+                        {users.filter((u) => u.role === 'printer').map((printer) => (
+                          <SelectItem key={printer.id} value={printer.id}>{printer.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
