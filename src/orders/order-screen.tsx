@@ -135,7 +135,10 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   }
   if (!order) return <EmptyWorkspace openNewOrder={props.openNewOrder} canCreateOrder={props.canCreateOrder} />;
   // order-level progress: who can act on the strip below the header
-  const canAdvance = isAdmin || order.assignedArtistId === props.user.id;
+  const isAssignedPrinter = props.user.role === 'printer' && (order.assignedPrinterIds ?? []).includes(props.user.id);
+  // printers advance only their own stages (Printing, Heatpress) — not later stages
+  const printerCanAdvance = isAssignedPrinter && (props.stage === 'Printing' || props.stage === 'Heatpress');
+  const canAdvance = isAdmin || order.assignedArtistId === props.user.id || printerCanAdvance;
   const canQc = isAdmin || props.user.role === 'qc';
   const atLastStage = props.stage === 'Completed' || props.stage === stages[stages.length - 1];
   const releaseGate = props.stage === 'For Release' && props.qcStatus !== 'Passed';
