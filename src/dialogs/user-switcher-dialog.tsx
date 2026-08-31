@@ -5,7 +5,7 @@ import { users, roleDefs } from '../shared/constants';
 import type { Role, User } from '../shared/types';
 
 export function UserSwitcherDialog({ user, close, select }: { user: User; close: () => void; select: (user: User) => void }) {
-  const personaKeys: Role[] = ['owner', 'artist', 'sewer', 'heatpress', 'qc'];
+  const personaKeys: Role[] = ['owner', 'artist', 'printer', 'sewer', 'heatpress', 'qc'];
   return (
     <Dialog open onOpenChange={(open) => { if (!open) close(); }}>
       <DialogContent className="sm:max-w-[580px]" showCloseButton>
