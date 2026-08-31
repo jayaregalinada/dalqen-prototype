@@ -61,7 +61,7 @@ export type DemoOrder = {
   createdAt: string;
   discussion: DemoComment[]; // Jira-style comment thread
   assignedArtistId: string; // "" = none; the artist who can see this order and join its discussion
-  assignedPrinterId: string; // "" = none; the printing-crew member assigned to this order
+  assignedPrinterIds: string[]; // printing crew assigned to this order ([] = none); multiple allowed
   stage: string; // order-level progress stage (progress lives on the order, not on items)
   qcStatus: 'Pending' | 'Passed' | 'Issue';
   projects: DemoProject[];
@@ -93,7 +93,7 @@ export const defaultOrderTypes: Record<string, string[]> = {
   Custom: ['Custom item'],
 };
 
-export type NewOrderInput = Omit<DemoOrder, 'id' | 'ref' | 'createdAt' | 'projects' | 'lineUpColumns' | 'removedLineUpColumns' | 'lineUpTemplateName' | 'discussion' | 'assignedArtistId' | 'assignedPrinterId' | 'stage' | 'qcStatus' | 'designs' | 'sizings'> & {
+export type NewOrderInput = Omit<DemoOrder, 'id' | 'ref' | 'createdAt' | 'projects' | 'lineUpColumns' | 'removedLineUpColumns' | 'lineUpTemplateName' | 'discussion' | 'assignedArtistId' | 'assignedPrinterIds' | 'stage' | 'qcStatus' | 'designs' | 'sizings'> & {
   projects: Array<{ name: string; custom: Record<string, string> }>;
 };
 
@@ -252,7 +252,11 @@ function normalizeOrder(value: unknown): DemoOrder | null {
     createdAt: safeText(order.createdAt, 40) || new Date().toISOString(),
     discussion: normalizeDiscussion(order.discussion),
     assignedArtistId: safeText(order.assignedArtistId, 80),
-    assignedPrinterId: safeText(order.assignedPrinterId, 80),
+    assignedPrinterIds: (() => {
+      const raw = (order as unknown as { assignedPrinterIds?: unknown }).assignedPrinterIds;
+      const legacy = safeText((order as unknown as { assignedPrinterId?: unknown }).assignedPrinterId, 80);
+      return uniqNames(Array.isArray(raw) ? raw : legacy ? [legacy] : []).slice(0, 8);
+    })(),
     projects: Array.isArray(order.projects) ? order.projects.map(normalizeProject).filter((item): item is DemoProject => item !== null) : [],
     stage: (() => {
       // progress lives on the order: prefer an explicit order-level stage, else derive
