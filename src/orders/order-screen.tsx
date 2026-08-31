@@ -54,6 +54,7 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   const [overviewDraft, setOverviewDraft] = useState<string | null>(null); // null = read mode
   const [briefDraft, setBriefDraft] = useState<Partial<DemoOrder> | null>(null);
   const [crewDraft, setCrewDraft] = useState<Partial<DemoOrder> | null>(null);
+  const [sidebarView, setSidebarView] = useState<'info' | 'crew'>('info');
   // Line Up: cell edits accumulate in a local draft; auto-saved (debounced) + manual Save.
   const [lineUpDraft, setLineUpDraft] = useState<Record<string, LineUpRowDraft> | null>(null);
   const draftRef = useRef<Record<string, LineUpRowDraft> | null>(null);
@@ -565,162 +566,158 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
         <aside className="grid content-start gap-3">
           <Card className="mb-0">
             <CardHeader>
-              <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Order info</span>
-              <CardAction>
-                {isAdmin && (briefDraft === null
-                  ? <Button type='button' variant="ghost" size="sm" className="gap-1 px-2 text-xs font-bold text-primary hover:text-primary" onClick={() => setBriefDraft({ customer: order.customer, contact: order.contact, category: order.category, orderType: order.orderType, dueDate: order.dueDate, priority: order.priority })}><IconPencil size={13} /> Edit</Button>
-                  : null)}
-              </CardAction>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-0.5 rounded-full bg-muted p-0.5">
+                  <Button type='button' variant={sidebarView === 'info' ? 'secondary' : 'ghost'} size="sm" className="h-6 rounded-full px-3 text-[11px] font-bold" onClick={() => setSidebarView('info')}>Info</Button>
+                  <Button type='button' variant={sidebarView === 'crew' ? 'secondary' : 'ghost'} size="sm" className={cn('h-6 rounded-full px-3 text-[11px] font-bold', sidebarView === 'crew' && (printerMissing || sewerMissing || qcMissing || releaseMissing) && 'text-amber-700')} onClick={() => setSidebarView('crew')}>Crew</Button>
+                </div>
+                <CardAction>
+                  {isAdmin && (sidebarView === 'info' ? briefDraft === null : crewDraft === null)
+                    ? <Button type='button' variant="ghost" size="sm" className="gap-1 px-2 text-xs font-bold text-primary hover:text-primary" onClick={sidebarView === 'info' ? () => setBriefDraft({ customer: order.customer, contact: order.contact, category: order.category, orderType: order.orderType, dueDate: order.dueDate, priority: order.priority }) : () => setCrewDraft({ assignedArtistId: order.assignedArtistId, assignedPrinterIds: order.assignedPrinterIds, assignedSewerIds: order.assignedSewerIds, assignedQcIds: order.assignedQcIds, assignedReleaseIds: order.assignedReleaseIds })}><IconPencil size={13} /> Edit</Button>
+                    : null}
+                </CardAction>
+              </div>
             </CardHeader>
-            {briefDraft === null
-              ? (
-                <CardContent>
-                  {[['Customer', order.customer], ['Contact', order.contact || '—'], ['Category', order.category], ['Order type', order.orderType], ['Created', formatDate(order.createdAt.slice(0, 10))], ['Promise date', formatDate(order.dueDate)], ['Priority', order.priority]].map(([dt, dd]) => (
-                    <div key={dt} className="grid gap-0.5 border-b py-2.5 last:border-b-0">
-                      <dt className="text-xs text-muted-foreground">{dt}</dt>
-                      <dd className="text-xs font-bold text-foreground">{dd}</dd>
-                    </div>
+            {sidebarView === 'info'
+              ? (briefDraft === null
+                  ? (
+                    <CardContent>
+                      {[['Customer', order.customer], ['Contact', order.contact || '—'], ['Category', order.category], ['Order type', order.orderType], ['Created', formatDate(order.createdAt.slice(0, 10))], ['Promise date', formatDate(order.dueDate)], ['Priority', order.priority]].map(([dt, dd]) => (
+                        <div key={dt} className="grid gap-0.5 border-b py-2.5 last:border-b-0">
+                          <dt className="text-xs text-muted-foreground">{dt}</dt>
+                          <dd className="text-xs font-bold text-foreground">{dd}</dd>
+                        </div>
+                      ))}
+                    </CardContent>
+                  )
+                  : (
+                    <CardContent className="grid gap-2.5">
+                      <label className="grid gap-1 text-xs font-bold text-foreground">Customer<Input required value={briefDraft.customer ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, customer: e.target.value })} /></label>
+                      <label className="grid gap-1 text-xs font-bold text-foreground">Contact<Input value={briefDraft.contact ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, contact: e.target.value })} /></label>
+                      <label className="grid gap-1 text-xs font-bold text-foreground">Category
+                        <Select value={briefDraft.category ?? ''} onValueChange={(v) => { const cat = v ?? ''; setBriefDraft({ ...briefDraft, category: cat, orderType: (props.orderTypes[cat] ?? [])[0] ?? '' }); }}>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {props.categories.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <label className="grid gap-1 text-xs font-bold text-foreground">Order type
+                        <Select value={briefDraft.orderType ?? ''} onValueChange={(v) => setBriefDraft({ ...briefDraft, orderType: v ?? '' })}>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {(props.orderTypes[briefDraft.category ?? ''] ?? []).map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <label className="grid gap-1 text-xs font-bold text-foreground">Promise date<Input type="date" value={briefDraft.dueDate ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, dueDate: e.target.value })} /></label>
+                      <label className="grid gap-1 text-xs font-bold text-foreground">Priority
+                        <Select value={briefDraft.priority ?? 'Normal'} onValueChange={(v) => setBriefDraft({ ...briefDraft, priority: (v ?? 'Normal') as 'Normal' | 'Urgent' })}>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Normal">Normal</SelectItem><SelectItem value="Urgent">Urgent</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <div className="mt-1 flex gap-2">
+                        <Button type='button' onClick={saveBrief}>Save</Button>
+                        <Button type='button' variant="ghost" onClick={() => setBriefDraft(null)}>Cancel</Button>
+                      </div>
+                    </CardContent>
+                  ))
+              : (crewDraft === null
+                  ? (
+                    <CardContent>
+                      {[['Assigned artist', order.assignedArtistId ? [order.assignedArtistId] : []], ['Printing crew', order.assignedPrinterIds ?? []], ['Sewing crew', order.assignedSewerIds ?? []], ['QC crew', order.assignedQcIds ?? []], ['Release crew', order.assignedReleaseIds ?? []]].map(([label, ids]) => (
+                        <div key={label as string} className="border-b py-2 last:border-b-0">
+                          <dt className="text-xs text-muted-foreground">{label}</dt>
+                          <dd className="mt-1.5 flex flex-wrap gap-1">
+                            {(ids as string[]).length === 0
+                              ? <span className="text-xs font-bold text-foreground">—</span>
+                              : (ids as string[]).map((id) => {
+                                  const crew = users.find((u) => u.id === id);
+                                  return crew ? <Badge key={id} variant="secondary" className="rounded-full font-bold">{crew.name}</Badge> : null;
+                                })}
+                          </dd>
+                        </div>
+                      ))}
+                    </CardContent>
+                  )
+                  : (
+                    <CardContent className="grid gap-2.5">
+                      <label className="grid gap-1 text-xs font-bold text-foreground">Assigned artist
+                        <Select value={crewDraft.assignedArtistId || '__unassigned__'} onValueChange={(v) => setCrewDraft({ ...crewDraft, assignedArtistId: v === '__unassigned__' ? '' : v })}>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__unassigned__">— Unassigned</SelectItem>
+                            {users.filter((u) => u.role === 'artist').map((artist) => (
+                              <SelectItem key={artist.id} value={artist.id}>{artist.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <label className="grid gap-1 text-xs font-bold text-foreground">Printing crew
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {users.filter((u) => u.role === 'printer').map((printer) => {
+                            const on = (crewDraft.assignedPrinterIds ?? []).includes(printer.id);
+                            return (
+                              <Button key={printer.id} type='button' variant={on ? 'default' : 'outline'} size="sm" className="h-7 rounded-full px-2.5 text-xs font-bold" onClick={() => setCrewDraft({ ...crewDraft, assignedPrinterIds: on ? (crewDraft.assignedPrinterIds ?? []).filter((id) => id !== printer.id) : [...(crewDraft.assignedPrinterIds ?? []), printer.id] })}>
+                                {printer.name}
+                              </Button>
+                            );
+                          })}
+                          <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setCrewDraft({ ...crewDraft, assignedPrinterIds: users.filter((u) => u.role === 'printer').map((p) => p.id) })}>Select all</Button>
+                          {(crewDraft.assignedPrinterIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setCrewDraft({ ...crewDraft, assignedPrinterIds: [] })}>Clear</Button>}
+                        </div>
+                      </label>
+                      <label className="grid gap-1 text-xs font-bold text-foreground">Sewing crew
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {users.filter((u) => u.role === 'sewer').map((sewer) => {
+                            const on = (crewDraft.assignedSewerIds ?? []).includes(sewer.id);
+                            return (
+                              <Button key={sewer.id} type='button' variant={on ? 'default' : 'outline'} size="sm" className="h-7 rounded-full px-2.5 text-xs font-bold" onClick={() => setCrewDraft({ ...crewDraft, assignedSewerIds: on ? (crewDraft.assignedSewerIds ?? []).filter((id) => id !== sewer.id) : [...(crewDraft.assignedSewerIds ?? []), sewer.id] })}>
+                                {sewer.name}
+                              </Button>
+                            );
+                          })}
+                          <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setCrewDraft({ ...crewDraft, assignedSewerIds: users.filter((u) => u.role === 'sewer').map((p) => p.id) })}>Select all</Button>
+                          {(crewDraft.assignedSewerIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setCrewDraft({ ...crewDraft, assignedSewerIds: [] })}>Clear</Button>}
+                        </div>
+                      </label>
+                      <label className="grid gap-1 text-xs font-bold text-foreground">QC crew
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {users.filter((u) => u.role === 'qc').map((qc) => {
+                            const on = (crewDraft.assignedQcIds ?? []).includes(qc.id);
+                            return (
+                              <Button key={qc.id} type='button' variant={on ? 'default' : 'outline'} size="sm" className="h-7 rounded-full px-2.5 text-xs font-bold" onClick={() => setCrewDraft({ ...crewDraft, assignedQcIds: on ? (crewDraft.assignedQcIds ?? []).filter((id) => id !== qc.id) : [...(crewDraft.assignedQcIds ?? []), qc.id] })}>
+                                {qc.name}
+                              </Button>
+                            );
+                          })}
+                          <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setCrewDraft({ ...crewDraft, assignedQcIds: users.filter((u) => u.role === 'qc').map((p) => p.id) })}>Select all</Button>
+                          {(crewDraft.assignedQcIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setCrewDraft({ ...crewDraft, assignedQcIds: [] })}>Clear</Button>}
+                        </div>
+                      </label>
+                      <label className="grid gap-1 text-xs font-bold text-foreground">Release crew
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {users.filter((u) => u.role === 'release').map((release) => {
+                            const on = (crewDraft.assignedReleaseIds ?? []).includes(release.id);
+                            return (
+                              <Button key={release.id} type='button' variant={on ? 'default' : 'outline'} size="sm" className="h-7 rounded-full px-2.5 text-xs font-bold" onClick={() => setCrewDraft({ ...crewDraft, assignedReleaseIds: on ? (crewDraft.assignedReleaseIds ?? []).filter((id) => id !== release.id) : [...(crewDraft.assignedReleaseIds ?? []), release.id] })}>
+                                {release.name}
+                              </Button>
+                            );
+                          })}
+                          <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setCrewDraft({ ...crewDraft, assignedReleaseIds: users.filter((u) => u.role === 'release').map((p) => p.id) })}>Select all</Button>
+                          {(crewDraft.assignedReleaseIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setCrewDraft({ ...crewDraft, assignedReleaseIds: [] })}>Clear</Button>}
+                        </div>
+                      </label>
+                      <div className="mt-1 flex gap-2">
+                        <Button type='button' onClick={saveCrew}>Save</Button>
+                        <Button type='button' variant="ghost" onClick={() => setCrewDraft(null)}>Cancel</Button>
+                      </div>
+                    </CardContent>
                   ))}
-                </CardContent>
-              )
-              : (
-                <CardContent className="grid gap-2.5">
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Customer<Input required value={briefDraft.customer ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, customer: e.target.value })} /></label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Contact<Input value={briefDraft.contact ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, contact: e.target.value })} /></label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Category
-                    <Select value={briefDraft.category ?? ''} onValueChange={(v) => { const cat = v ?? ''; setBriefDraft({ ...briefDraft, category: cat, orderType: (props.orderTypes[cat] ?? [])[0] ?? '' }); }}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {props.categories.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Order type
-                    <Select value={briefDraft.orderType ?? ''} onValueChange={(v) => setBriefDraft({ ...briefDraft, orderType: v ?? '' })}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {(props.orderTypes[briefDraft.category ?? ''] ?? []).map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Promise date<Input type="date" value={briefDraft.dueDate ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, dueDate: e.target.value })} /></label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Priority
-                    <Select value={briefDraft.priority ?? 'Normal'} onValueChange={(v) => setBriefDraft({ ...briefDraft, priority: (v ?? 'Normal') as 'Normal' | 'Urgent' })}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Normal">Normal</SelectItem><SelectItem value="Urgent">Urgent</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </label>
-                  <div className="mt-1 flex gap-2">
-                    <Button type='button' onClick={saveBrief}>Save</Button>
-                    <Button type='button' variant="ghost" onClick={() => setBriefDraft(null)}>Cancel</Button>
-                  </div>
-                </CardContent>
-              )}
-          </Card>
-          <Card className="mb-0">
-            <CardHeader>
-              <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Crew</span>
-              <CardAction>
-                {isAdmin && (crewDraft === null
-                  ? <Button type='button' variant="ghost" size="sm" className="gap-1 px-2 text-xs font-bold text-primary hover:text-primary" onClick={() => setCrewDraft({ assignedArtistId: order.assignedArtistId, assignedPrinterIds: order.assignedPrinterIds, assignedSewerIds: order.assignedSewerIds, assignedQcIds: order.assignedQcIds, assignedReleaseIds: order.assignedReleaseIds })}><IconPencil size={13} /> Edit</Button>
-                  : null)}
-              </CardAction>
-            </CardHeader>
-            {crewDraft === null
-              ? (
-                <CardContent>
-                  {[['Assigned artist', order.assignedArtistId ? [order.assignedArtistId] : []], ['Printing crew', order.assignedPrinterIds ?? []], ['Sewing crew', order.assignedSewerIds ?? []], ['QC crew', order.assignedQcIds ?? []], ['Release crew', order.assignedReleaseIds ?? []]].map(([label, ids]) => (
-                    <div key={label as string} className="border-b py-2 last:border-b-0">
-                      <dt className="text-xs text-muted-foreground">{label}</dt>
-                      <dd className="mt-1.5 flex flex-wrap gap-1">
-                        {(ids as string[]).length === 0
-                          ? <span className="text-xs font-bold text-foreground">—</span>
-                          : (ids as string[]).map((id) => {
-                              const crew = users.find((u) => u.id === id);
-                              return crew ? <Badge key={id} variant="secondary" className="rounded-full font-bold">{crew.name}</Badge> : null;
-                            })}
-                      </dd>
-                    </div>
-                  ))}
-                </CardContent>
-              )
-              : (
-                <CardContent className="grid gap-2.5">
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Assigned artist
-                    <Select value={crewDraft.assignedArtistId || '__unassigned__'} onValueChange={(v) => setCrewDraft({ ...crewDraft, assignedArtistId: v === '__unassigned__' ? '' : v })}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__unassigned__">— Unassigned</SelectItem>
-                        {users.filter((u) => u.role === 'artist').map((artist) => (
-                          <SelectItem key={artist.id} value={artist.id}>{artist.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Printing crew
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {users.filter((u) => u.role === 'printer').map((printer) => {
-                        const on = (crewDraft.assignedPrinterIds ?? []).includes(printer.id);
-                        return (
-                          <Button key={printer.id} type='button' variant={on ? 'default' : 'outline'} size="sm" className="h-7 rounded-full px-2.5 text-xs font-bold" onClick={() => setCrewDraft({ ...crewDraft, assignedPrinterIds: on ? (crewDraft.assignedPrinterIds ?? []).filter((id) => id !== printer.id) : [...(crewDraft.assignedPrinterIds ?? []), printer.id] })}>
-                            {printer.name}
-                          </Button>
-                        );
-                      })}
-                      <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setCrewDraft({ ...crewDraft, assignedPrinterIds: users.filter((u) => u.role === 'printer').map((p) => p.id) })}>Select all</Button>
-                      {(crewDraft.assignedPrinterIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setCrewDraft({ ...crewDraft, assignedPrinterIds: [] })}>Clear</Button>}
-                    </div>
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Sewing crew
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {users.filter((u) => u.role === 'sewer').map((sewer) => {
-                        const on = (crewDraft.assignedSewerIds ?? []).includes(sewer.id);
-                        return (
-                          <Button key={sewer.id} type='button' variant={on ? 'default' : 'outline'} size="sm" className="h-7 rounded-full px-2.5 text-xs font-bold" onClick={() => setCrewDraft({ ...crewDraft, assignedSewerIds: on ? (crewDraft.assignedSewerIds ?? []).filter((id) => id !== sewer.id) : [...(crewDraft.assignedSewerIds ?? []), sewer.id] })}>
-                            {sewer.name}
-                          </Button>
-                        );
-                      })}
-                      <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setCrewDraft({ ...crewDraft, assignedSewerIds: users.filter((u) => u.role === 'sewer').map((p) => p.id) })}>Select all</Button>
-                      {(crewDraft.assignedSewerIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setCrewDraft({ ...crewDraft, assignedSewerIds: [] })}>Clear</Button>}
-                    </div>
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">QC crew
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {users.filter((u) => u.role === 'qc').map((qc) => {
-                        const on = (crewDraft.assignedQcIds ?? []).includes(qc.id);
-                        return (
-                          <Button key={qc.id} type='button' variant={on ? 'default' : 'outline'} size="sm" className="h-7 rounded-full px-2.5 text-xs font-bold" onClick={() => setCrewDraft({ ...crewDraft, assignedQcIds: on ? (crewDraft.assignedQcIds ?? []).filter((id) => id !== qc.id) : [...(crewDraft.assignedQcIds ?? []), qc.id] })}>
-                            {qc.name}
-                          </Button>
-                        );
-                      })}
-                      <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setCrewDraft({ ...crewDraft, assignedQcIds: users.filter((u) => u.role === 'qc').map((p) => p.id) })}>Select all</Button>
-                      {(crewDraft.assignedQcIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setCrewDraft({ ...crewDraft, assignedQcIds: [] })}>Clear</Button>}
-                    </div>
-                  </label>
-                  <label className="grid gap-1 text-xs font-bold text-foreground">Release crew
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {users.filter((u) => u.role === 'release').map((release) => {
-                        const on = (crewDraft.assignedReleaseIds ?? []).includes(release.id);
-                        return (
-                          <Button key={release.id} type='button' variant={on ? 'default' : 'outline'} size="sm" className="h-7 rounded-full px-2.5 text-xs font-bold" onClick={() => setCrewDraft({ ...crewDraft, assignedReleaseIds: on ? (crewDraft.assignedReleaseIds ?? []).filter((id) => id !== release.id) : [...(crewDraft.assignedReleaseIds ?? []), release.id] })}>
-                            {release.name}
-                          </Button>
-                        );
-                      })}
-                      <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setCrewDraft({ ...crewDraft, assignedReleaseIds: users.filter((u) => u.role === 'release').map((p) => p.id) })}>Select all</Button>
-                      {(crewDraft.assignedReleaseIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setCrewDraft({ ...crewDraft, assignedReleaseIds: [] })}>Clear</Button>}
-                    </div>
-                  </label>
-                  <div className="mt-1 flex gap-2">
-                    <Button type='button' onClick={saveCrew}>Save</Button>
-                    <Button type='button' variant="ghost" onClick={() => setCrewDraft(null)}>Cancel</Button>
-                  </div>
-                </CardContent>
-              )}
           </Card>
         </aside>
       </div>
