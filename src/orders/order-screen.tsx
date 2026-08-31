@@ -140,7 +140,11 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   const printerCanAdvance = isAssignedPrinter && (props.stage === 'Printing' || props.stage === 'Heatpress');
   const isAssignedSewer = props.user.role === 'sewer' && (order.assignedSewerIds ?? []).includes(props.user.id);
   const sewerCanAdvance = isAssignedSewer && props.stage === 'Sewing';
-  const canAdvance = isAdmin || order.assignedArtistId === props.user.id || printerCanAdvance || sewerCanAdvance;
+  const isAssignedQc = props.user.role === 'qc' && (order.assignedQcIds ?? []).includes(props.user.id);
+  const qcCanAdvance = isAssignedQc && props.stage === 'QC';
+  const isAssignedRelease = props.user.role === 'release' && (order.assignedReleaseIds ?? []).includes(props.user.id);
+  const releaseCanAdvance = isAssignedRelease && props.stage === 'For Release';
+  const canAdvance = isAdmin || order.assignedArtistId === props.user.id || printerCanAdvance || sewerCanAdvance || qcCanAdvance || releaseCanAdvance;
   const canQc = isAdmin || props.user.role === 'qc';
   const atLastStage = props.stage === 'Completed' || props.stage === stages[stages.length - 1];
   const releaseGate = props.stage === 'For Release' && props.qcStatus !== 'Passed';
@@ -158,6 +162,10 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
   const advanceBlockedByPrinter = printerMissing;
   const sewerMissing = props.stage === 'Sewing' && (order.assignedSewerIds?.length ?? 0) === 0;
   const advanceBlockedBySewer = sewerMissing;
+  const qcMissing = props.stage === 'QC' && (order.assignedQcIds?.length ?? 0) === 0;
+  const advanceBlockedByQc = qcMissing;
+  const releaseMissing = props.stage === 'For Release' && (order.assignedReleaseIds?.length ?? 0) === 0;
+  const advanceBlockedByRelease = releaseMissing;
   const isRevised = props.stage === 'Approval' && designState === 'rejected';
 
   const formatCommentTime = (iso: string) => {
@@ -317,7 +325,7 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
         {isRevised && <div className="px-3.5 pb-2"><Badge variant="destructive">Revised · v{designs.length}</Badge></div>}
         <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5">
           <div className="flex flex-wrap items-center gap-2.5">
-            {canAdvance && <Button type='button' onClick={props.advanceStage} disabled={atLastStage || releaseGate || advanceBlockedByDesign || advanceBlockedByApproval || advanceBlockedByLineUp || advanceBlockedBySizing || advanceBlockedByPrinter || advanceBlockedBySewer} title={releaseGate ? 'QC must pass before release' : advanceBlockedByDesign ? 'Upload a design in Designs tab first' : advanceBlockedByApproval ? 'Approve at least one design first' : advanceBlockedByLineUp ? 'Add at least one Line Up item first' : advanceBlockedBySizing ? 'Upload sizing for every Line Up item first' : advanceBlockedByPrinter ? 'Assign a printing crew first' : advanceBlockedBySewer ? 'Assign a sewing crew first' : undefined}><IconArrowRight size={15} /> {props.stage === 'For Release' ? 'Release order' : 'Advance stage'}</Button>}
+            {canAdvance && <Button type='button' onClick={props.advanceStage} disabled={atLastStage || releaseGate || advanceBlockedByDesign || advanceBlockedByApproval || advanceBlockedByLineUp || advanceBlockedBySizing || advanceBlockedByPrinter || advanceBlockedBySewer || advanceBlockedByQc || advanceBlockedByRelease} title={releaseGate ? 'QC must pass before release' : advanceBlockedByDesign ? 'Upload a design in Designs tab first' : advanceBlockedByApproval ? 'Approve at least one design first' : advanceBlockedByLineUp ? 'Add at least one Line Up item first' : advanceBlockedBySizing ? 'Upload sizing for every Line Up item first' : advanceBlockedByPrinter ? 'Assign a printing crew first' : advanceBlockedBySewer ? 'Assign a sewing crew first' : advanceBlockedByQc ? 'Assign a QC crew first' : advanceBlockedByRelease ? 'Assign a release crew first' : undefined}><IconArrowRight size={15} /> {props.stage === 'For Release' ? 'Release order' : 'Advance stage'}</Button>}
             {canQc && props.qcStatus !== 'Passed' && <Button type='button' variant="outline" onClick={props.passQc}><IconClipboardCheck size={15} /> Record QC pass</Button>}
             {isAdmin && <Button type='button' variant="outline" onClick={props.openRework}><IconRefresh size={15} /> Send back</Button>}
             {!canAdvance && <span className="text-xs text-muted-foreground">Current stage: <strong className="text-primary">{props.stage}</strong></span>}
@@ -325,6 +333,8 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
           {releaseGate && <small className="text-xs font-bold text-amber-700">QC must pass before this order can be released.</small>}
           {printerMissing && <small className="text-xs font-bold text-amber-700">Awaiting printing crew assignment.</small>}
           {sewerMissing && <small className="text-xs font-bold text-amber-700">Awaiting sewing crew assignment.</small>}
+          {qcMissing && <small className="text-xs font-bold text-amber-700">Awaiting QC crew assignment.</small>}
+          {releaseMissing && <small className="text-xs font-bold text-amber-700">Awaiting release crew assignment.</small>}
         </div>
       </section>
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)}>
@@ -553,14 +563,14 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
               <span className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">Job brief</span>
               <CardAction>
                 {isAdmin && (briefDraft === null
-                  ? <Button type='button' variant="ghost" size="sm" className="gap-1 px-2 text-xs font-bold text-primary hover:text-primary" onClick={() => setBriefDraft({ customer: order.customer, contact: order.contact, category: order.category, orderType: order.orderType, dueDate: order.dueDate, priority: order.priority, assignedArtistId: order.assignedArtistId, assignedPrinterIds: order.assignedPrinterIds, assignedSewerIds: order.assignedSewerIds })}><IconPencil size={13} /> Edit</Button>
+                  ? <Button type='button' variant="ghost" size="sm" className="gap-1 px-2 text-xs font-bold text-primary hover:text-primary" onClick={() => setBriefDraft({ customer: order.customer, contact: order.contact, category: order.category, orderType: order.orderType, dueDate: order.dueDate, priority: order.priority, assignedArtistId: order.assignedArtistId, assignedPrinterIds: order.assignedPrinterIds, assignedSewerIds: order.assignedSewerIds, assignedQcIds: order.assignedQcIds, assignedReleaseIds: order.assignedReleaseIds })}><IconPencil size={13} /> Edit</Button>
                   : null)}
               </CardAction>
             </CardHeader>
             {briefDraft === null
               ? (
                 <CardContent>
-                  {[['Customer', order.customer], ['Contact', order.contact || '—'], ['Category', order.category], ['Order type', order.orderType], ['Assigned artist', users.find((u) => u.id === order.assignedArtistId)?.name ?? '—'], ['Printing crew', order.assignedPrinterIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean).join(', ') || '—'], ['Sewing crew', order.assignedSewerIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean).join(', ') || '—'], ['Created', formatDate(order.createdAt.slice(0, 10))], ['Promise date', formatDate(order.dueDate)], ['Priority', order.priority]].map(([dt, dd]) => (
+                  {[['Customer', order.customer], ['Contact', order.contact || '—'], ['Category', order.category], ['Order type', order.orderType], ['Assigned artist', users.find((u) => u.id === order.assignedArtistId)?.name ?? '—'], ['Printing crew', order.assignedPrinterIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean).join(', ') || '—'], ['Sewing crew', order.assignedSewerIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean).join(', ') || '—'], ['QC crew', order.assignedQcIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean).join(', ') || '—'], ['Release crew', order.assignedReleaseIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean).join(', ') || '—'], ['Created', formatDate(order.createdAt.slice(0, 10))], ['Promise date', formatDate(order.dueDate)], ['Priority', order.priority]].map(([dt, dd]) => (
                     <div key={dt} className="grid gap-0.5 border-b py-2.5 last:border-b-0">
                       <dt className="text-xs text-muted-foreground">{dt}</dt>
                       <dd className="text-xs font-bold text-foreground">{dd}</dd>
@@ -625,6 +635,34 @@ export function OrderScreen({ props, flavor }: { props: PrototypeProps; flavor: 
                       })}
                       <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setBriefDraft({ ...briefDraft, assignedSewerIds: users.filter((u) => u.role === 'sewer').map((p) => p.id) })}>Select all</Button>
                       {(briefDraft.assignedSewerIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setBriefDraft({ ...briefDraft, assignedSewerIds: [] })}>Clear</Button>}
+                    </div>
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-foreground">QC crew
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {users.filter((u) => u.role === 'qc').map((qc) => {
+                        const on = (briefDraft.assignedQcIds ?? []).includes(qc.id);
+                        return (
+                          <Button key={qc.id} type='button' variant={on ? 'default' : 'outline'} size="sm" className="h-7 rounded-full px-2.5 text-xs font-bold" onClick={() => setBriefDraft({ ...briefDraft, assignedQcIds: on ? (briefDraft.assignedQcIds ?? []).filter((id) => id !== qc.id) : [...(briefDraft.assignedQcIds ?? []), qc.id] })}>
+                            {qc.name}
+                          </Button>
+                        );
+                      })}
+                      <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setBriefDraft({ ...briefDraft, assignedQcIds: users.filter((u) => u.role === 'qc').map((p) => p.id) })}>Select all</Button>
+                      {(briefDraft.assignedQcIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setBriefDraft({ ...briefDraft, assignedQcIds: [] })}>Clear</Button>}
+                    </div>
+                  </label>
+                  <label className="grid gap-1 text-xs font-bold text-foreground">Release crew
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {users.filter((u) => u.role === 'release').map((release) => {
+                        const on = (briefDraft.assignedReleaseIds ?? []).includes(release.id);
+                        return (
+                          <Button key={release.id} type='button' variant={on ? 'default' : 'outline'} size="sm" className="h-7 rounded-full px-2.5 text-xs font-bold" onClick={() => setBriefDraft({ ...briefDraft, assignedReleaseIds: on ? (briefDraft.assignedReleaseIds ?? []).filter((id) => id !== release.id) : [...(briefDraft.assignedReleaseIds ?? []), release.id] })}>
+                            {release.name}
+                          </Button>
+                        );
+                      })}
+                      <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-primary" onClick={() => setBriefDraft({ ...briefDraft, assignedReleaseIds: users.filter((u) => u.role === 'release').map((p) => p.id) })}>Select all</Button>
+                      {(briefDraft.assignedReleaseIds ?? []).length > 0 && <Button type='button' variant="ghost" size="sm" className="h-7 px-2 text-xs font-bold text-muted-foreground" onClick={() => setBriefDraft({ ...briefDraft, assignedReleaseIds: [] })}>Clear</Button>}
                     </div>
                   </label>
                   <label className="grid gap-1 text-xs font-bold text-foreground">Promise date<Input type="date" value={briefDraft.dueDate ?? ''} onChange={(e) => setBriefDraft({ ...briefDraft, dueDate: e.target.value })} /></label>

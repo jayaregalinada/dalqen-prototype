@@ -63,6 +63,8 @@ export type DemoOrder = {
   assignedArtistId: string; // "" = none; the artist who can see this order and join its discussion
   assignedPrinterIds: string[]; // printing crew assigned to this order ([] = none); multiple allowed
   assignedSewerIds: string[]; // sewing crew assigned to this order ([] = none); multiple allowed
+  assignedQcIds: string[]; // QC crew assigned to this order ([] = none); multiple allowed
+  assignedReleaseIds: string[]; // release crew assigned to this order ([] = none); multiple allowed
   stage: string; // order-level progress stage (progress lives on the order, not on items)
   qcStatus: 'Pending' | 'Passed' | 'Issue';
   projects: DemoProject[];
@@ -94,7 +96,7 @@ export const defaultOrderTypes: Record<string, string[]> = {
   Custom: ['Custom item'],
 };
 
-export type NewOrderInput = Omit<DemoOrder, 'id' | 'ref' | 'createdAt' | 'projects' | 'lineUpColumns' | 'removedLineUpColumns' | 'lineUpTemplateName' | 'discussion' | 'assignedArtistId' | 'assignedPrinterIds' | 'assignedSewerIds' | 'stage' | 'qcStatus' | 'designs' | 'sizings'> & {
+export type NewOrderInput = Omit<DemoOrder, 'id' | 'ref' | 'createdAt' | 'projects' | 'lineUpColumns' | 'removedLineUpColumns' | 'lineUpTemplateName' | 'discussion' | 'assignedArtistId' | 'assignedPrinterIds' | 'assignedSewerIds' | 'assignedQcIds' | 'assignedReleaseIds' | 'stage' | 'qcStatus' | 'designs' | 'sizings'> & {
   projects: Array<{ name: string; custom: Record<string, string> }>;
 };
 
@@ -259,6 +261,8 @@ function normalizeOrder(value: unknown): DemoOrder | null {
       return uniqNames(Array.isArray(raw) ? raw : legacy ? [legacy] : []).slice(0, 8);
     })(),
     assignedSewerIds: uniqNames((order as unknown as { assignedSewerIds?: unknown }).assignedSewerIds).slice(0, 8),
+    assignedQcIds: uniqNames((order as unknown as { assignedQcIds?: unknown }).assignedQcIds).slice(0, 8),
+    assignedReleaseIds: uniqNames((order as unknown as { assignedReleaseIds?: unknown }).assignedReleaseIds).slice(0, 8),
     projects: Array.isArray(order.projects) ? order.projects.map(normalizeProject).filter((item): item is DemoProject => item !== null) : [],
     stage: (() => {
       // progress lives on the order: prefer an explicit order-level stage, else derive

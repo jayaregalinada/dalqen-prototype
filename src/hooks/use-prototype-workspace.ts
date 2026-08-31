@@ -39,7 +39,7 @@ export function usePrototypeWorkspace(
   const orderParam = params.get('order');
 
   const visibleOrders = sharedState.orders.filter(
-    (order) => user.role === 'owner' || order.assignedArtistId === user.id || (order.assignedPrinterIds ?? []).includes(user.id) || (order.assignedSewerIds ?? []).includes(user.id),
+    (order) => user.role === 'owner' || order.assignedArtistId === user.id || (order.assignedPrinterIds ?? []).includes(user.id) || (order.assignedSewerIds ?? []).includes(user.id) || (order.assignedQcIds ?? []).includes(user.id) || (order.assignedReleaseIds ?? []).includes(user.id),
   );
   const selectedOrder = !orderParam
     ? visibleOrders[0]
@@ -228,6 +228,8 @@ export function usePrototypeWorkspace(
         assignedArtistId: '',
         assignedPrinterIds: [],
         assignedSewerIds: [],
+        assignedQcIds: [],
+        assignedReleaseIds: [],
         stage: 'Layout',
         qcStatus: 'Pending',
         designs: [],

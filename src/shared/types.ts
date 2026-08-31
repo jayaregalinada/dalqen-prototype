@@ -2,7 +2,7 @@ import type { DemoComment, DemoOrder, DemoProject, NewOrderInput, SyncStatus } f
 export type { DemoComment, DemoOrder, DemoProject, NewOrderInput, SyncStatus };
 export type Screen = "dashboard" | "orders" | "order";
 export type QueueMode = 'orders' | 'kanban';
-export type Role = "owner" | "artist" | "printer" | "sewer" | "heatpress" | "qc";
+export type Role = "owner" | "artist" | "printer" | "sewer" | "heatpress" | "qc" | "release";
 export type User = { id: string; name: string; role: Role; initials: string; dept: string | null };
 export type OrderRow = { ref: string; title: string; customer: string; due: string; stage: string; status: string; priority: string };
 export type DashboardStats = { overdue: number; dueToday: number; waiting: number; qcIssues: number; ready: number; activeOrders: number; released: number };

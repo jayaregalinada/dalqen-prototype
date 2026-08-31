@@ -6,6 +6,7 @@ export const roleDefs: Array<{ key: Role; label: string; stages: string[] }> = [
   { key: "sewer", label: "Sewer", stages: ["Sewing"] },
   { key: "heatpress", label: "Heatpress", stages: ["Heatpress"] },
   { key: "qc", label: "Quality Control", stages: ["QC"] },
+  { key: "release", label: "Release", stages: ["For Release", "Completed"] },
 ];
 export const users: User[] = [
   { id: "owner", name: "Workspace Owner", role: "owner", initials: "WO", dept: null },
@@ -19,5 +20,7 @@ export const users: User[] = [
   { id: "tomas", name: "Tomas Aquino", role: "heatpress", initials: "TA", dept: "Heatpress" },
   { id: "nina", name: "Nina Bautista", role: "qc", initials: "NB", dept: "QC" },
   { id: "carlos", name: "Carlos Vega", role: "qc", initials: "CV", dept: "QC" },
+  { id: "dan", name: "Dan Rivera", role: "release", initials: "DR", dept: "Release" },
+  { id: "sofia", name: "Sofia Mendoza", role: "release", initials: "SM", dept: "Release" },
 ];
 export const stages = ["Layout", "Approval", "Document", "Sizing", "Printing", "Heatpress", "Sewing", "QC", "For Release", "Completed"];
